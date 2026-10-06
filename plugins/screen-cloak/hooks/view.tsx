@@ -14,6 +14,8 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   accounts: 'Account numbers',
   percent: 'Percentages',
   names: 'Names and terms',
+  personal: 'Personal details',
+  secrets: 'Passwords and keys',
 }
 
 const HOVER_CARD_LIMIT = 400

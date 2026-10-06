@@ -8,9 +8,18 @@
 // two collide, because code, logs and version numbers fill a coding session.
 // The tradeoffs are written beside each detector and in the README.
 
-export type Category = 'emails' | 'phones' | 'money' | 'accounts' | 'percent' | 'names'
+export type Category = 'emails' | 'phones' | 'money' | 'accounts' | 'percent' | 'names' | 'personal' | 'secrets'
 
-export const CATEGORIES: readonly Category[] = ['emails', 'phones', 'money', 'accounts', 'percent', 'names']
+export const CATEGORIES: readonly Category[] = [
+  'emails',
+  'phones',
+  'money',
+  'accounts',
+  'percent',
+  'names',
+  'personal',
+  'secrets',
+]
 
 export type Categories = Record<Category, boolean>
 
@@ -21,12 +30,14 @@ export const ALL_ON: Categories = {
   accounts: true,
   percent: true,
   names: true,
+  personal: true,
+  secrets: true,
 }
 
-/** Things that get a numbered stand-in. Money and percentages use a fixed one. */
-export type EntryKind = 'email' | 'phone' | 'account' | 'name'
+/** Things that get a numbered stand-in. Money, percentages and secrets use a fixed one. */
+export type EntryKind = 'email' | 'phone' | 'account' | 'name' | 'person' | 'org' | 'address' | 'date' | 'id' | 'ip'
 
-export type SpanKind = EntryKind | 'money' | 'percent'
+export type SpanKind = EntryKind | 'money' | 'percent' | 'secret'
 
 /** One original and its stand-in. The original lives in memory only. */
 export type Entry = {
@@ -41,6 +52,8 @@ export type Config = {
   categories: Categories
   /** Names and terms the person listed. */
   terms: readonly string[]
+  /** People already found this session (by a "Name:" label); their first and last names are hidden too. */
+  people?: readonly string[]
 }
 
 export type Span = {
@@ -547,14 +560,212 @@ export function detectNames(text: string, terms: readonly string[]): Span[] {
   return out
 }
 
+// ------------------------------------------------------------ labelled fields
+
+type FieldValue = 'token' | 'line' | 'date' | 'people' | 'org'
+
+type Field = {
+  /** Regex source for the label words. */
+  label: string
+  kind: SpanKind
+  category: Category
+  value: FieldValue
+  /** The label must be followed by ":", "=", "#" or "is". */
+  needsSep?: boolean
+  /** The value must hold a digit (ids, codes). */
+  needsDigit?: boolean
+}
+
+const FIELDS: Field[] = [
+  { label: String.raw`(?:full |first |last |legal |patient |client |contact )?name|patient|contact`, kind: 'person', category: 'personal', value: 'people', needsSep: true },
+  { label: String.raw`employer|company|organi[sz]ation|works at`, kind: 'org', category: 'personal', value: 'org', needsSep: true },
+  { label: String.raw`(?:home |mailing |street |billing |shipping )?address`, kind: 'address', category: 'personal', value: 'line', needsSep: true, needsDigit: true },
+  { label: String.raw`birthday|birth ?date|date of birth|d\.?o\.?b\.?|born(?: on)?`, kind: 'date', category: 'personal', value: 'date' },
+  { label: String.raw`driver['’]?s? licen[cs]e|licen[cs]e(?= ?(?:number|no\.?|num|#))|passport|employee|staff|badge|member|policy|patient id|medical record|mrn|national id|tax id|ssn`, kind: 'id', category: 'personal', value: 'token', needsDigit: true },
+  { label: String.raw`user ?name|login|handle`, kind: 'id', category: 'personal', value: 'token', needsSep: true },
+  { label: String.raw`pass(?:word|code|phrase)|pwd|pin|api[ _-]?key|access[ _-]?key|secret(?:[ _-]?key)?|token|bearer`, kind: 'secret', category: 'secrets', value: 'token', needsSep: true },
+  { label: String.raw`cvv2?|cvc2?|csc|security code`, kind: 'secret', category: 'secrets', value: 'token', needsDigit: true },
+  { label: String.raw`exp(?:iry|ires|iration)?(?: date)?|valid thru`, kind: 'secret', category: 'secrets', value: 'token', needsDigit: true },
+]
+
+const MONTHS = String.raw`(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)`
+const DATE_VALUE = String.raw`(?:${MONTHS}\.? \d{1,2}(?:st|nd|rd|th)?,? \d{4}|\d{1,2}(?:st|nd|rd|th)? ${MONTHS}\.?,? \d{4}|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2})`
+const CAP_WORD = String.raw`\p{Lu}[\p{L}'’]*(?:-\p{Lu}[\p{L}'’]*)*`
+const VALUE: Record<FieldValue, string> = {
+  token: String.raw`[^\s,;"'()<>\[\]]+`,
+  line: String.raw`[^\n]+`,
+  date: DATE_VALUE,
+  // Two to four capitalised words: "Maria Delgado-Whitfield".
+  people: String.raw`${CAP_WORD}(?:[  ]${CAP_WORD}){1,3}`,
+  // One to five capitalised words, "&" and "and" allowed between them.
+  org: String.raw`${CAP_WORD}(?:[  ](?:&[  ])?${CAP_WORD}){0,4}`,
+}
+
+// Code says "password: string" or "token = null"; those are types and placeholders, not secrets.
+const PLACEHOLDER = /^(?:string|number|boolean|null|undefined|none|true|false|any|str|int|\*+|x+|\.\.\.|…|<.*>|\$.*|\{.*|process\.env.*|os\.environ.*)$/i
+
+const fieldRegexes = FIELDS.map(f => {
+  const sep = String.raw`\s*(?:[:=#]|\bis\b)\s*`
+  const suffix = String.raw`(?:\s*(?:number|no\.?|num|#|id|code))?`
+  const between = f.needsSep ? sep : String.raw`(?:${sep}|\s+)`
+  return {
+    field: f,
+    re: new RegExp(
+      String.raw`(?<![\p{L}\p{N}_])(?:${f.label})${suffix}${between}(?:"|\*\*)?\s*(${VALUE[f.value]})`,
+      'giu',
+    ),
+  }
+})
+
+export function detectFields(text: string, on: Categories): Span[] {
+  const out: Span[] = []
+  for (const { field, re } of fieldRegexes) {
+    if (!on[field.category]) continue
+    re.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = re.exec(text)) !== null) {
+      let value = m[1] as string
+      // Trim sentence punctuation and closing quotes or bold markers from the end.
+      value = value.replace(/(?:\*\*|["'.,;:!?)])+$/, '').trimEnd()
+      if (field.value === 'line') value = value.replace(/\s+(?:or|and)\s.*$/i, '')
+      if (value.length < 2 || PLACEHOLDER.test(value)) continue
+      if (field.needsDigit && !/\d/.test(value)) continue
+      const end = m.index + m[0].length
+      const start = text.indexOf(value, end - (m[1] as string).length)
+      if (start === -1) continue
+      out.push({
+        start,
+        end: start + value.length,
+        kind: field.kind,
+        category: field.category,
+        text: value,
+        ...(field.kind === 'secret' ? { standIn: '•••••' } : { key: field.kind === 'person' || field.kind === 'org' ? termKey(value) : value.toLowerCase() }),
+      })
+    }
+  }
+  return out
+}
+
+// ---------------------------------------------------------------- addresses
+
+const STREET_TYPES =
+  'Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Boulevard|Blvd|Court|Ct|Way|Place|Pl|Terrace|Ter|Circle|Cir|Parkway|Pkwy|Highway|Hwy|Square|Sq|Trail|Trl|Loop|Row|Alley'
+const STATES =
+  'AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY'
+const STREET = new RegExp(
+  String.raw`\b\d{1,6}[  ](?:[NSEW]\.?[  ])?(?:\p{Lu}[\p{L}']*[  ]){1,4}(?:${STREET_TYPES})\b\.?` +
+    String.raw`(?:,?[  ](?:Apt|Apartment|Suite|Ste|Unit|#)\.?[  ]?[A-Za-z0-9-]+)?` +
+    String.raw`(?:,[  ](?:\p{Lu}[\p{L}']*[  ]?){1,3},?[  ](?:${STATES})(?:[  ]\d{5}(?:-\d{4})?)?)?`,
+  'gu',
+)
+
+/** US street addresses: "4821 Maple Hollow Lane, Springfield, IL 62704". */
+export function detectAddresses(text: string): Span[] {
+  const out: Span[] = []
+  STREET.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = STREET.exec(text)) !== null) {
+    const original = m[0].replace(/[  ]+$/, '')
+    out.push({ start: m.index, end: m.index + original.length, kind: 'address', category: 'personal', text: original, key: original.toLowerCase().replace(/\s+/g, ' ') })
+  }
+  return out
+}
+
+// ------------------------------------------------------------------------ ips
+
+const IPV4 = /(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.]|\.\d)/g
+
+/**
+ * Public IPv4 addresses. Loopback, private ranges, 0.0.0.0 and broadcast stay
+ * visible because dev servers and configs are full of them.
+ */
+export function detectIps(text: string): Span[] {
+  if (!/\d\.\d/.test(text)) return []
+  const out: Span[] = []
+  IPV4.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = IPV4.exec(text)) !== null) {
+    const parts = m[0].split('.').map(Number)
+    if (parts.some(p => p > 255)) continue
+    const [a, b] = parts as [number, number]
+    const isLocal = a === 0 || a === 10 || a === 127 || a === 255 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254)
+    if (isLocal) continue
+    if (text[m.index - 1] === 'v') continue // v1.2.3.4 is a version
+    out.push({ start: m.index, end: m.index + m[0].length, kind: 'ip', category: 'personal', text: m[0], key: m[0] })
+  }
+  return out
+}
+
+// -------------------------------------------------------------------- secrets
+
+const KEY_SHAPES = new RegExp(
+  [
+    String.raw`\b(?:sk|pk|rk)[-_](?:live|test|proj|ant[-_]api\d*)?[-_]?[A-Za-z0-9_-]{16,}`,
+    String.raw`\bgh[pousr]_[A-Za-z0-9]{20,}`,
+    String.raw`\bgithub_pat_[A-Za-z0-9_]{20,}`,
+    String.raw`\bxox[abprs]-[A-Za-z0-9-]{10,}`,
+    String.raw`\bAKIA[0-9A-Z]{16}\b`,
+    String.raw`\bAIza[0-9A-Za-z_-]{30,}`,
+    String.raw`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`,
+  ].join('|'),
+  'g',
+)
+
+/** API keys and tokens with a well-known shape (sk-..., ghp_..., AKIA..., JWTs). */
+export function detectKeys(text: string): Span[] {
+  const out: Span[] = []
+  KEY_SHAPES.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = KEY_SHAPES.exec(text)) !== null) {
+    out.push({ start: m.index, end: m.index + m[0].length, kind: 'secret', category: 'secrets', text: m[0], standIn: '[api key]' })
+  }
+  return out
+}
+
+// ------------------------------------------------------------------- people
+
+/**
+ * After "Name: Maria Delgado-Whitfield" is found, the first and last names on
+ * their own ("Call Maria") are hidden too, with the same stand-in. Only
+ * capitalised matches count, so "mark" the verb is safe when Mark is a person.
+ */
+export function detectPeople(text: string, people: readonly string[]): Span[] {
+  const byToken = new Map<string, string>()
+  for (const full of people) {
+    const key = termKey(full)
+    byToken.set(cleanTerm(full), key)
+    for (const part of cleanTerm(full).split(/[  ]+/)) {
+      if (part.length >= 3 && !byToken.has(part)) byToken.set(part, key)
+      for (const piece of part.split('-')) if (piece.length >= 3 && !byToken.has(piece)) byToken.set(piece, key)
+    }
+  }
+  if (byToken.size === 0) return []
+  const tokens = [...byToken.keys()].sort((a, b) => b.length - a.length)
+  const re = new RegExp(String.raw`(?<![\p{L}\p{N}_-])(?:${tokens.map(t => t.split(' ').map(escapeRegex).join(String.raw`\s+`)).join('|')})(?![\p{L}\p{N}_-])`, 'gu')
+  const out: Span[] = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    const key = byToken.get(m[0].replace(/\s+/g, ' ')) as string
+    out.push({ start: m.index, end: m.index + m[0].length, kind: 'person', category: 'personal', text: m[0], key })
+  }
+  return out
+}
+
 // ------------------------------------------------------------------- spans
 
 const PRIORITY: Record<SpanKind, number> = {
-  account: 6,
-  email: 5,
-  phone: 4,
+  secret: 9,
+  account: 8,
+  email: 7,
+  address: 6,
+  phone: 5,
+  ip: 5,
+  id: 4,
+  date: 4,
   money: 3,
   percent: 2,
+  person: 1,
+  org: 1,
   name: 1,
 }
 
@@ -574,6 +785,16 @@ export function detect(text: string, config: Config): Span[] {
   if (on.money) found.push(...detectMoney(text))
   if (on.percent) found.push(...detectPercent(text))
   if (on.names) found.push(...detectNames(text, config.terms))
+  if (on.personal || on.secrets) {
+    const fields = detectFields(text, on)
+    found.push(...fields)
+    if (on.personal) {
+      found.push(...detectAddresses(text), ...detectIps(text))
+      const people = [...(config.people ?? []), ...fields.filter(f => f.kind === 'person').map(f => f.text)]
+      found.push(...detectPeople(text, people))
+    }
+    if (on.secrets) found.push(...detectKeys(text))
+  }
   if (found.length <= 1) return found
 
   const order = [...found].sort(
@@ -620,6 +841,18 @@ export function standInFor(kind: EntryKind, n: number): string {
       return `[acct ${n}]`
     case 'name':
       return `Client ${letters(n)}`
+    case 'person':
+      return `Person ${letters(n)}`
+    case 'org':
+      return `Company ${letters(n)}`
+    case 'address':
+      return `[address ${n}]`
+    case 'date':
+      return `[date ${n}]`
+    case 'id':
+      return `[id ${n}]`
+    case 'ip':
+      return `[ip ${n}]`
   }
 }
 
@@ -640,7 +873,18 @@ export type Mapper = {
 export function createMapper(entries: readonly Entry[]): Mapper {
   const all = [...entries]
   const byKey = new Map<string, Entry>()
-  const counts: Record<EntryKind, number> = { email: 0, phone: 0, account: 0, name: 0 }
+  const counts: Record<EntryKind, number> = {
+    email: 0,
+    phone: 0,
+    account: 0,
+    name: 0,
+    person: 0,
+    org: 0,
+    address: 0,
+    date: 0,
+    id: 0,
+    ip: 0,
+  }
   for (const e of all) {
     byKey.set(`${e.kind}|${e.key}`, e)
     counts[e.kind]++
@@ -679,7 +923,8 @@ export function isNothingOn(config: Config): boolean {
 
 export function cloak(text: string, config: Config, mapper: Mapper): Cloaked {
   const before = mapper.added.length
-  const spans = detect(text, config)
+  const people = mapper.entries.filter(e => e.kind === 'person').map(e => e.original)
+  const spans = detect(text, people.length > 0 ? { ...config, people: [...(config.people ?? []), ...people] } : config)
   if (spans.length === 0) {
     return { text, hits: [], segments: [{ text }], added: [] }
   }

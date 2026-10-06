@@ -10,11 +10,15 @@ export type ScreenCloakCategories = {
   percent: boolean
   /** The names and terms the person listed. */
   names: boolean
+  /** People after a "Name:" label, employers, street addresses, birthdays, ids, public IPs. */
+  personal: boolean
+  /** Passwords, API keys, tokens, card CVV and expiry. */
+  secrets: boolean
 }
 
 /** One original and the stand-in drawn for it. Kept in memory for the session only. */
 export type ScreenCloakEntry = {
-  kind: 'email' | 'phone' | 'account' | 'name'
+  kind: 'email' | 'phone' | 'account' | 'name' | 'person' | 'org' | 'address' | 'date' | 'id' | 'ip'
   /** Normalised form used for lookup. */
   key: string
   /** The real text. Never written to disk. */

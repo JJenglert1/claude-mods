@@ -10,6 +10,8 @@ const only = (...on: (keyof Categories)[]): Categories => ({
   accounts: on.includes('accounts'),
   percent: on.includes('percent'),
   names: on.includes('names'),
+  personal: on.includes('personal'),
+  secrets: on.includes('secrets'),
 })
 
 const cfg = (c: Categories, terms: string[] = []): Config => ({ categories: c, terms })
@@ -115,5 +117,46 @@ describe('detectors', () => {
       'size 1024 bytes, 512 MB, 2.5M users',
     ].join('\n')
     expect(cloakText(text, cfg(ALL_ON)).text).toBe(text)
+  })
+})
+
+describe('personal details and secrets', () => {
+  test('the demo profile is fully hidden', () => {
+    const profile = [
+      '- **Name:** Maria Delgado-Whitfield',
+      '- **Email:** maria.delgado@example.com',
+      '- **Phone:** (555) 010-4477',
+      '- **Home address:** 4821 Maple Hollow Lane, Springfield, IL 62704',
+      '- **Birthday:** March 14, 1987',
+      '- **SSN:** 900-12-3456',
+      "- **Driver's license:** D400-7788-2291",
+      '- **Passport:** X12345678',
+      '- **Credit card:** 4111 1111 1111 1111, exp 08/29, CVV 123',
+      '- **Bank account:** routing 021000021, account 000123456789',
+      '- **IBAN:** GB82 WEST 1234 5698 7654 32',
+      '- **IP address:** 203.0.113.42',
+      '- **API key:** sk-test-4f8a1c9e2b7d4a60b3e5f1a9c2d84e07',
+      '- **Password:** Summer!Rain2026#',
+      '- **Username:** mdelgado87',
+      '- **Employer:** Northwind Traders, employee ID NW-004821',
+      '- **Medical record #:** MRN-7782145',
+      '- **Note:** "Call Maria at (555) 010-4477 or email maria.delgado@example.com. Her SSN is 900-12-3456."',
+    ].join('\n')
+    const out = hide(profile, ALL_ON)
+    for (const secret of [
+      'Maria', 'Delgado', 'example.com', '010-4477', 'Maple', '62704', '1987', '3456', 'D400', 'X12345678',
+      '1111', '08/29', 'CVV 123', '021000021', '000123456789', 'GB82', '203.0.113', 'sk-test', 'Summer',
+      'mdelgado87', 'Northwind', 'NW-004821', 'MRN-7782145',
+    ]) {
+      expect(out.includes(secret)).toBe(false)
+    }
+    expect(out).toContain('Person A')
+    expect(out).toContain('Call Person A at [phone 1]')
+  })
+
+  test('code and dev values stay visible', () => {
+    for (const s of ['password: string', 'token = null', 'name: my-plugin', 'listen on 127.0.0.1:3000', 'Apache License 2.0', 'v1.2.3.4']) {
+      expect(hide(s, ALL_ON)).toBe(s)
+    }
   })
 })

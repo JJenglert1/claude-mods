@@ -71,6 +71,8 @@ The command's own answer never repeats a name you typed. The echo of your
 | Account numbers | Card numbers (13 to 19 digits, Luhn check), IBANs (checksum), social security numbers `123-45-6789`, 6 to 17 digits after "account", "acct", "routing", "IBAN" | `[acct 1]` |
 | Percentages | `12%`, `3.5 %`, `12 percent` | `•••%` |
 | Names and terms | What you list with `/cloak add`. Not case sensitive. Spaces match any run of spaces | `Client A`, `Client B`, ... |
+| Personal details | A person after a "Name:" label (and their first or last name alone later), an employer after "Employer:", US street addresses, a birthday after "Birthday" or "DOB", ids after "driver's license", "passport", "employee ID", "MRN", "medical record #", a username after "Username:", public IP addresses | `Person A`, `Company A`, `[address 1]`, `[date 1]`, `[id 1]`, `[ip 1]` |
+| Passwords and keys | API keys with a known shape (`sk-...`, `ghp_...`, `AKIA...`, JWTs), a value after "password:", "token:", "API key:", "secret:", a card's CVV and expiry | `[api key]`, `•••••` |
 
 Each category has its own switch (settings pane, band, or command). Stand-ins
 are consistent: the same original, in any letter case or phone format, gets
@@ -84,16 +86,19 @@ of version numbers, dates, line numbers, ids and shell variables.
 
 Not hidden on purpose:
 
-- Version numbers, dates, times, IPs, UUIDs, commit hashes, `src/app.ts:120`, timestamps.
+- Version numbers, dates (unless labelled as a birthday), times, local and private IPs (`127.0.0.1`, `192.168.x.x`), UUIDs, commit hashes, `src/app.ts:120`, timestamps.
 - Package pins and mentions: `lodash@4.17.21`, `@types/node`, `@Override`, `user@localhost`, and `git@github.com:org/repo.git`.
 - A lone `$5` (one digit, nothing else), because `$1`, `$2` are everywhere in shell and regex code. `$10`, `$5.00`, `$5k` are hidden.
 - A number with no currency mark: `2.5M users`, `19.99`, `1,234 rows`. `10 pounds` is weight, not money.
 - A bare 10 or 11 digit number with no phone word near it. Also 7-digit local numbers (`555-1234`).
 - A long number with no check digit and no word like "account" next to it (an order id, a bank account written bare).
 - A name glued to other letters: `Acmeville`, `Pacme`, `acme_inc`, plural `Acmes`. Chinese and Japanese text has no word breaks, so a listed term must stand apart from other letters there.
-- Nicknames, misspellings and anything you did not list. Names are matched only from your list.
+- Nicknames, misspellings and anything you did not list. People are found only from your list or a "Name:" label.
+- A password or username with no label word in front of it.
 
 Hidden even though it may be harmless:
+
+- A capitalised value after "Name:", "Contact:" or "Company:" in config files or docs.
 
 - Percentages in code or CSS (`width: 100%`). Switch Percentages off if that gets in the way.
 - Any three groups of 3, 3 and 4 digits split by spaces, dots or dashes (`100 200 3000`) reads as a US phone number.

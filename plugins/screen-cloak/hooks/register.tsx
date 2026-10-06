@@ -296,7 +296,7 @@ function statusText(v: View): string {
 const HELP = [
   '/cloak on | off | status',
   '/cloak add <name>  /cloak remove <name or stand-in>',
-  '/cloak emails|phones|money|accounts|percent|names on|off  (or: financial)',
+  '/cloak emails|phones|money|accounts|percent|names|personal|secrets on|off  (or: financial)',
   '/cloak record on|off  (recording mode)',
   '/cloak reveal  /cloak hide',
   '/cloak preview  /cloak settings',
@@ -314,6 +314,11 @@ const SWITCH: Record<string, Category[]> = {
   percentages: ['percent'],
   names: ['names'],
   name: ['names'],
+  personal: ['personal'],
+  identity: ['personal'],
+  secrets: ['secrets'],
+  secret: ['secrets'],
+  keys: ['secrets'],
   financial: ['money', 'accounts', 'percent'],
 }
 
