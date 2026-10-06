@@ -1,0 +1,9 @@
+{
+  "name": "agentpane",
+  "version": "0.1.0",
+  "author": {
+    "name": "JJ Englert"
+  },
+  "description": "A side pane listing every helper agent in the session: what it does, how long it has run, and when it finishes.",
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "quest-mode",
+  "version": "0.1.0",
+  "author": {
+    "name": "JJ Englert"
+  },
+  "description": "Turns a real task into a small retro RPG quest: a pixel map, a character, stages you confirm, and a boss battle (/quest).",
+  "types": "./types/index.d.ts"
+}

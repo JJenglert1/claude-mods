@@ -1,0 +1,39 @@
+{
+  "name": "screen-cloak",
+  "version": "0.1.0",
+  "author": { "name": "JJ Englert" },
+  "description": "Hides emails, phone numbers, money, account numbers and names you list from what is drawn on screen, so you can share your screen. Claude still sees everything.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "startOn": {
+      "type": "boolean",
+      "title": "Start with Cloak on",
+      "description": "Turn Cloak on at the start of every session.",
+      "default": false
+    },
+    "alwaysHide": {
+      "type": "string",
+      "title": "Names to always hide",
+      "description": "Names and terms to hide in every session, separated by commas. Saved in your settings file as plain text. Names added with /cloak add stay in this session only.",
+      "default": ""
+    },
+    "revealSeconds": {
+      "type": "number",
+      "title": "Reveal lasts (seconds)",
+      "description": "How long a reveal stays before the details are hidden again.",
+      "default": 10
+    },
+    "hoverReveal": {
+      "type": "boolean",
+      "title": "Reveal on hover",
+      "description": "Let the pointer reveal a hidden detail in the Cloak panes and assistant messages. Always off while recording mode is on.",
+      "default": false
+    },
+    "hideBandWhenOff": {
+      "type": "boolean",
+      "title": "Hide the band when Cloak is off",
+      "description": "Show the Cloak band above the prompt only while Cloak is on. Use /cloak on to turn it back on.",
+      "default": false
+    }
+  }
+}

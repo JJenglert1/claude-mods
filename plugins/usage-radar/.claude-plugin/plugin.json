@@ -1,0 +1,17 @@
+{
+  "name": "usage-radar",
+  "version": "0.2.0",
+  "author": {
+    "name": "JJ Englert"
+  },
+  "description": "Shows how much of your Claude plan limits you have used, when they reset, and whether your current pace may reach them first.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "warnLevels": {
+      "type": "string",
+      "title": "Warning levels",
+      "description": "Percent-used levels that earn a quiet notification, once per window. Up to four numbers, for example 80, 95.",
+      "default": "80, 95"
+    }
+  }
+}

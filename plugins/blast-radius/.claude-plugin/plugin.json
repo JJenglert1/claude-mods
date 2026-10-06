@@ -1,0 +1,9 @@
+{
+  "name": "blast-radius",
+  "version": "0.1.0",
+  "author": {
+    "name": "JJ Englert"
+  },
+  "description": "Before a shell command deletes or discards files, shows exactly what it would hit and waits for Cancel or Proceed.",
+  "types": "./types/index.d.ts"
+}

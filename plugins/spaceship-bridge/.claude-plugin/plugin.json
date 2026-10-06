@@ -1,0 +1,9 @@
+{
+  "name": "spaceship-bridge",
+  "version": "0.1.0",
+  "author": {
+    "name": "JJ Englert"
+  },
+  "description": "A spaceship bridge for everyday work: Claude as the ship's computer, with a mission display, honest status lights, a captain's log and a results shelf.",
+  "types": "./types/index.d.ts"
+}

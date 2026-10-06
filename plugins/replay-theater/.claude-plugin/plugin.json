@@ -1,0 +1,9 @@
+{
+  "name": "replay-theater",
+  "version": "0.1.0",
+  "author": {
+    "name": "JJ Englert"
+  },
+  "description": "Records every file change Claude makes and plays the changes back frame by frame in a pane (/replay).",
+  "types": "./types/index.d.ts"
+}

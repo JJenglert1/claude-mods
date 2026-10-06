@@ -1,0 +1,7 @@
+{
+  "name": "time-machine",
+  "version": "0.1.0",
+  "author": { "name": "JJ Englert" },
+  "description": "Snapshots your project right before Claude changes files, so you can roll back to any earlier point with /time-machine.",
+  "types": "./types/index.d.ts"
+}
