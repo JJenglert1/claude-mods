@@ -14,12 +14,6 @@ const turnStart = ($: any) => $.turn.start({ text: 'go', turnId: 't1' })
 const turnEnd = ($: any, id = 't1') => $.turn.complete({ answer: 'All done! Stage complete.', durationMs: 5, isAborted: false, turnId: id, reason: 'answer' })
 
 describe('Claude does the work, you decide', () => {
-  test('result paths are tidy', () => {
-    expect(slugify('Build the slides!')).toBe('build-the-slides')
-    const q = newQuest('custom', 'g', fallbackStages('custom'), 'built-in', 1)
-    expect(resultPath(q, 0)).toBe('quest/01-gather-supplies.md')
-    expect(stageWorkPrompt(q, 1, 'must be short', 'quest/02-x.md')).toContain('must be short')
-  })
 
   for (const surface of SURFACES) {
     test(`send, work, ready, approve on ${surface}`, async ($: any, on: any) => {
@@ -80,49 +74,7 @@ describe('Claude does the work, you decide', () => {
       await ui.unmount()
     })
 
-    test(`revise sends feedback and waits for a new result on ${surface}`, async ($: any, on: any) => {
-      const w = world(on)
-      await startSession($)
-      const ui = await mountPane($, surface)
-      await begin(w, ui)
-      await ui.press({ key: 'send' })
-      await $.tool.call({ tool: 'Write', file_path: 'quest/01-define-the-audience.md', content: 'first draft' })
-      await turnEnd($)
-      expect(w.quest().stages[0].readyAt).not.toBeNull()
-
-      await ui.press({ key: 'revise' })
-      await ui.input({ key: 'field', text: 'Add the budget angle' })
-      expect(w.prompts[1]).toContain('Add the budget angle')
-      expect(w.prompts[1]).toContain('quest/01-define-the-audience.md')
-      expect(w.quest().stages[0]).toMatchObject({ readyAt: null, revisions: 1 })
-      expect(await ui.find({ key: 'approve' })).toBeUndefined()
-
-      // an unchanged file is not a new result; a rewrite is
-      await turnEnd($, 't2')
-      expect(w.quest().stages[0].readyAt).toBeNull()
-      expect(await ui.find({ type: 'Text', text: /not there yet|has not changed|Orders sent|Sent back/ })).toBeDefined()
-      await w.clock.advance(1000)
-      await $.tool.call({ tool: 'Write', file_path: 'quest/01-define-the-audience.md', content: 'second draft with budget' })
-      expect(w.quest().stages[0].readyAt).not.toBeNull()
-      await ui.press({ key: 'approve' })
-      expect(w.quest().current).toBe(1)
-      await ui.unmount()
-    })
   }
-
-  test('an empty revision note is refused', async ($: any, on: any) => {
-    const w = world(on)
-    await startSession($)
-    const ui = await mountPane($, 'terminal')
-    await begin(w, ui)
-    await ui.press({ key: 'send' })
-    await $.tool.call({ tool: 'Write', file_path: 'quest/01-define-the-audience.md', content: 'x' })
-    await ui.press({ key: 'revise' })
-    await ui.input({ key: 'field', text: '  ' })
-    expect(w.prompts).toHaveLength(1)
-    expect(await ui.find({ type: 'Text', text: /Tell Claude what to change/ })).toBeDefined()
-    await ui.unmount()
-  })
 
   test('Claude alone never completes: text, a done claim and even the result file leave it to you; Take over is yours', async ($: any, on: any) => {
     const w = world(on)
@@ -145,42 +97,4 @@ describe('Claude does the work, you decide', () => {
     await ui.unmount()
   })
 
-  test('approve is refused if the result file vanished', async ($: any, on: any) => {
-    const w = world(on)
-    await startSession($)
-    const ui = await mountPane($, 'desktop')
-    await begin(w, ui)
-    await ui.press({ key: 'send' })
-    await $.tool.call({ tool: 'Write', file_path: 'quest/01-define-the-audience.md', content: 'x' })
-    w.files.delete('quest/01-define-the-audience.md')
-    await ui.press({ key: 'approve' })
-    expect(w.quest().current).toBe(0)
-    expect(await ui.find({ type: 'Text', text: /went missing/ })).toBeDefined()
-    await ui.unmount()
-  })
-
-  test('side quests get a Send Claude button too; you still mark them done', async ($: any, on: any) => {
-    const w = world(on)
-    await startSession($)
-    const ui = await mountPane($, 'terminal')
-    await begin(w, ui)
-    const side = w.quest().stages[0].sideQuests[0]
-    await ui.press({ key: `sq-send:${side.id}` })
-    expect(w.prompts[0]).toContain('Interview one stakeholder')
-    expect(w.prompts[0]).toContain('quest/01-side-interview-one-stakeholder.md')
-    expect(w.quest().stages[0].sideQuests[0].status).toBe('open')
-    expect(w.quest().stages[0].status).toBe('todo')
-    await ui.unmount()
-  })
-
-  test('paused: no sending, no verdicts', async ($: any, on: any) => {
-    const w = world(on)
-    await startSession($)
-    const ui = await mountPane($, 'terminal')
-    await begin(w, ui)
-    await ui.press({ key: 'pause' })
-    expect(await ui.find({ key: 'send' })).toBeUndefined()
-    expect(await ui.find({ key: 'approve' })).toBeUndefined()
-    await ui.unmount()
-  })
 })

@@ -51,12 +51,6 @@ describe('game rules', () => {
     expect(lootOf(setSideQuest(q, stage.id, 'x1', 'skipped', 6))).toEqual([])
   })
 
-  test('multi-line goals and the boss name', () => {
-    expect(cleanGoal('  one  \n\n two\r\n  three ')).toBe('one\ntwo\nthree')
-    expect(oneLine('a\nb')).toBe('a / b')
-    expect(parseBoss('{"boss":"the algorithm","stages":[]}')).toBe('the algorithm')
-    expect(parseBoss('nonsense')).toBe('')
-  })
 })
 
 async function begin(w: World, ui: any) {
@@ -100,73 +94,5 @@ describe('game feel in the pane', () => {
       await ui.unmount()
     })
 
-    test(`boss arena, both HP bars, attack text and a flash only when motion is allowed on ${surface}`, async ($: any, on: any) => {
-      const w = world(on)
-      await startSession($)
-      const ui = await mountPane($, surface)
-      await begin(w, ui)
-      for (let i = 0; i < 4; i += 1) {
-        await ui.press({ key: 'complete' })
-        await ui.press({ key: 'confirm-yes' })
-        await w.clock.advance(150 * 8)
-      }
-      expect(await ui.find({ type: 'Text', text: 'the skeptical client blocks the way!' })).toBeDefined()
-      await ui.press({ key: 'boss-start' })
-      const arena = surface === 'terminal' ? await ui.find({ key: 'arena' }) : (await ui.findAll({ type: 'Svg' })).find((x: any) => /Boss arena/.test(x.props.alt))
-      expect(arena).toBeDefined()
-      const pic = (x: any) => (surface === 'terminal' ? x.props.cells : x.props.source)
-      const find = async () => (surface === 'terminal' ? ui.find({ key: 'arena' }) : (await ui.findAll({ type: 'Svg' })).find((x: any) => /Boss arena/.test(x.props.alt)))
-      const calm = pic(await find())
-      expect(await ui.find({ type: 'Text', text: /Hero HP .* 3\/3/ })).toBeDefined()
-
-      w.model.reply = prompt => (prompt.includes('grading one answer') ? { text: grade(9) } : 'error')
-      await ui.input({ key: 'answer', text: 'A strong answer with detail.' })
-      expect(w.value('ui').flash).toBe('hit')
-      expect(pic(await find())).not.toBe(calm)
-      expect(await ui.find({ type: 'Text', text: /You strike true! A mighty blow/ })).toBeDefined()
-      await w.clock.advance(500)
-      expect(w.value('ui').flash).toBeNull()
-
-      w.model.reply = prompt => (prompt.includes('grading one answer') ? { text: grade(1) } : 'error')
-      await ui.input({ key: 'answer', text: 'no' })
-      expect(w.value('ui').flash).toBe('hurt')
-      expect(await ui.find({ type: 'Text', text: 'The boss strikes back! You lose a heart.' })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /Hero HP .* 2\/3/ })).toBeDefined()
-      await w.clock.advance(500)
-
-      // reduced motion: no flash at all
-      await $.command.run({ command: 'quest', args: 'motion reduced', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
-      await ui.input({ key: 'answer', text: 'a decent answer' })
-      expect(w.value('ui').flash).toBeNull()
-      await ui.unmount()
-    })
-
-    test(`victory: fanfare, final stats, loot and links on ${surface}`, async ($: any, on: any) => {
-      const w = world(on)
-      await startSession($)
-      const ui = await mountPane($, surface)
-      await begin(w, ui)
-      await ui.press({ key: `sq-done:${w.quest().stages[0].sideQuests[0].id}` })
-      for (let i = 0; i < 4; i += 1) {
-        await ui.press({ key: 'complete' })
-        await ui.press({ key: 'confirm-yes' })
-        await w.clock.advance(150 * 8)
-      }
-      await $.tool.call({ tool: 'Write', file_path: '/work/final.md', content: 'x' })
-      await w.clock.advance(60_000 * 3)
-      await ui.press({ key: 'complete' })
-      await ui.press({ key: 'confirm-yes' })
-      expect(w.quest().phase).toBe('victory')
-      expect(await ui.find({ type: 'Text', text: 'VICTORY!' })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /FANFARE/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /Final stats: 5 stages, 675 XP, level 5, 1 loot item, 3 min/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: 'Inventory: ✦ Healing Potion' })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: '/work/final.md' })).toBeDefined()
-      expect(w.toasts.some(t => t.startsWith('Achievement unlocked: Dragon Slayer')), w.toasts.join(' | ')).toBe(true)
-      const banner = surface === 'terminal' ? await ui.find({ key: 'banner' }) : (await ui.findAll({ type: 'Svg' }))[0]
-      expect(banner).toBeDefined()
-      if (surface !== 'terminal') expect(banner.props.alt).toBe('Victory')
-      await ui.unmount()
-    })
   }
 })

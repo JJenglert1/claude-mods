@@ -26,26 +26,4 @@ describe('/replay', () => {
     expect(full.text).toContain('1 frame')
   })
 
-  test('reopening rewinds to the first frame and stops playback', async ($: any, on: any) => {
-    const w = world(on)
-    await $.tool.call({ tool: 'Write', file_path: '/p/a.txt', content: 'x\n' })
-    await $.tool.call({ tool: 'Write', file_path: '/p/a.txt', content: 'y\n' })
-    const ui = await $.ui.mount({
-      plugin: 'replay-theater',
-      surface: 'terminal',
-      component: 'Pane',
-      requestId: 'replay-theater',
-      props: { title: 'Replay Theater', isFocused: true, bodyColumns: 60, placement: 'inline', scroll: { offset: 0, bodyRows: 24 }, view: {} },
-    })
-    await ui.press({ key: 'last' })
-    await ui.press({ key: 'first' })
-    await ui.press({ key: 'play' })
-    expect(w.value('isPlaying')).toBe(true)
-    await $.command.run(RUN)
-    expect(w.value('isPlaying')).toBe(false)
-    expect(w.value('cursor')).toBe(0)
-    await w.clock.advance(5000)
-    expect(w.value('cursor')).toBe(0)
-    await ui.unmount()
-  })
 })

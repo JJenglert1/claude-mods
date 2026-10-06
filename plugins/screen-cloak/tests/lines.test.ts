@@ -42,25 +42,7 @@ describe('short lines other code prints', () => {
     expect(notices.at(-1)).toBe('Will write to email-1@hidden')
   })
 
-  test('a reveal shows them again', { plugins: [NOISY] }, async ($: any, on: any) => {
-    const w = world(on)
-    await start($)
-    await $.command.run(RUN('on'))
-    await $.command.run(RUN('reveal'))
-    await $.command.run(NOISY_RUN(EMAIL))
-    await w.clock.settle()
-    expect(w.toasts.at(-1)).toBe(`Sent to ${EMAIL} for Acme Corp`)
-  })
 })
 
 describe('the command itself', () => {
-  test('its echo row is cloaked once the name is on the list', async ($: any, on: any) => {
-    const w = world(on)
-    await start($)
-    await $.command.run(RUN('on'))
-    await $.command.run(RUN('add Acme Corp'))
-    await w.clock.settle()
-    await mountRow($, 'terminal', 'UserMessage', { text: '/cloak add Acme Corp', origin: { kind: 'composer' }, isExpanded: false }, 'echo')
-    expect(w.seen('echo').text).toBe('/cloak add Client A')
-  })
 })

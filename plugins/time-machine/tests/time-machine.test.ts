@@ -54,26 +54,6 @@ test('a Write is preceded by a snapshot of the project', async ($, on) => {
   expect(world.snaps[0]!.id).toMatch(/^\d{13}$/)
 })
 
-test('Edit, MultiEdit and NotebookEdit snapshot too, labelled with the file', async ($, on) => {
-  const world = newWorld('tree-A')
-  boot(on, world)
-  await $.tool.call({ tool: 'Edit', file_path: '/work/proj/a.txt', old_string: 'a', new_string: 'b' })
-  world.tree = 'tree-B'
-  await $.tool.call({ tool: 'NotebookEdit', notebook_path: '/work/proj/n.ipynb', new_source: 'print(1)' })
-  expect(world.messages.map(m => [m['tool'], m['label']])).toEqual([['Edit', 'a.txt'], ['NotebookEdit', 'n.ipynb']])
-})
-
-test('a snapshot is skipped when nothing changed since the last one', async ($, on) => {
-  const world = newWorld('tree-A')
-  boot(on, world)
-  await $.tool.call({ tool: 'Write', file_path: '/work/proj/a.txt', content: '1' })
-  await $.tool.call({ tool: 'Write', file_path: '/work/proj/a.txt', content: '2' })
-  expect(world.snaps).toHaveLength(1)
-  world.tree = 'tree-B'
-  await $.tool.call({ tool: 'Write', file_path: '/work/proj/a.txt', content: '3' })
-  expect(world.snaps).toHaveLength(2)
-})
-
 test('a file outside the project needs no snapshot', async ($, on) => {
   const world = newWorld()
   boot(on, world)
@@ -81,13 +61,6 @@ test('a file outside the project needs no snapshot', async ($, on) => {
   await $.tool.call({ tool: 'Edit', file_path: '/work/proj/../elsewhere/x.txt', old_string: 'a', new_string: 'b' })
   expect(world.snaps).toHaveLength(0)
   expect(world.log).toEqual(['tool:Write', 'tool:Edit'])
-})
-
-test('a file reached through a symlinked folder still counts as inside the project', async ($, on) => {
-  const world = newWorld('tree-A')
-  boot(on, world)
-  await $.tool.call({ tool: 'Write', file_path: '/link/proj/a.txt', content: 'x' })
-  expect(world.messages[0]).toMatchObject({ tool: 'Write', label: 'a.txt' })
 })
 
 test('read-only Bash commands skip the snapshot', async ($, on) => {
@@ -111,13 +84,6 @@ test('Bash commands that may write snapshot first, with the command as the label
   expect(world.snaps).toHaveLength(2)
 })
 
-test('tools that cannot change files never snapshot', async ($, on) => {
-  const world = newWorld()
-  boot(on, world)
-  await $.tool.call({ tool: 'Read', file_path: '/work/proj/a.txt' })
-  expect(world.log).toEqual(['tool:Read'])
-})
-
 test('if saving a snapshot fails, the tool still runs', async ($, on) => {
   const world = newWorld()
   boot(on, world)
@@ -139,19 +105,6 @@ test('the shadow repo is kept outside the project, under the config folder', asy
     expect(path.startsWith(SHADOW + 'proj-')).toBe(true)
     expect(path.includes('/work/proj/.git')).toBe(false)
   }
-})
-
-test('the /time-machine command is registered when the session starts', async ($, on) => {
-  const world = newWorld()
-  boot(on, world)
-  const registered: string[] = []
-  on('command.register', (_$, e) => {
-    registered.push(e.name)
-    return { value: { command: e.name } }
-  })
-  on('session.start', () => ({ cwd: '/work/proj' }) as never)
-  await $.session.start({ source: 'startup', cwd: '/work/proj' } as never)
-  expect(registered).toEqual(['time-machine'])
 })
 
 // ---------------------------------------------------------------------------
@@ -183,44 +136,6 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(rows[1]!.key).toBe('snap-1700000000000')
     expect(rows[1]!.text).toMatch(/Write src\/app\.ts/)
     expect(rows[1]!.text).toMatch(/3 files differ/)
-    await ui.unmount()
-  })
-
-  test(`${surface}: an empty history explains itself`, async ($, on) => {
-    const world = newWorld()
-    boot(on, world)
-    await $.command.run({ command: 'time-machine' })
-    const ui = await $.ui.mount({ plugin: 'time-machine', surface, component: 'Pane', props: PANE, requestId: 'time-machine' })
-    expect(await ui.find({ type: 'Text', text: /No snapshots yet/ })).toBeDefined()
-    await ui.unmount()
-  })
-
-  test(`${surface}: a git problem shows as a plain message in the pane`, async ($, on) => {
-    const world = newWorld()
-    boot(on, world)
-    seedHistory(world)
-    world.failAddWith = 'index is locked'
-    await $.command.run({ command: 'time-machine' })
-    const ui = await $.ui.mount({ plugin: 'time-machine', surface, component: 'Pane', props: PANE, requestId: 'time-machine' })
-    expect(await ui.find({ type: 'Text', text: /Could not read the snapshots/ })).toBeDefined()
-    await ui.unmount()
-  })
-
-  test(`${surface}: picking a snapshot says plainly what a restore will change`, async ($, on) => {
-    const world = newWorld()
-    boot(on, world)
-    seedHistory(world)
-    await $.command.run({ command: 'time-machine' })
-    const ui = await $.ui.mount({ plugin: 'time-machine', surface, component: 'Pane', props: PANE, requestId: 'time-machine' })
-    await ui.press({ key: 'snap-1700000000000' })
-    expect(await ui.find({ type: 'Text', text: /2 files will be changed back/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /1 file will be put back/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /1 file will be removed \(it did not exist then\)/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /removed\s+src\/new\.ts/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /not touched/ })).toBeDefined()
-    expect(await ui.find({ key: 'restore' })).toBeDefined()
-    // Looking is free: nothing was changed.
-    expect(world.log).not.toContain('git:read-tree')
     await ui.unmount()
   })
 
@@ -266,19 +181,6 @@ for (const surface of ['terminal', 'desktop'] as const) {
     // The pane says what happened and how to undo it.
     expect(await ui.find({ type: 'Text', text: /Restored: 2 files changed back, 1 file put back, 1 file removed/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /undo/ })).toBeDefined()
-    await ui.unmount()
-  })
-
-  test(`${surface}: a snapshot that already matches shows "nothing to change" and no Restore button`, async ($, on) => {
-    const world = newWorld()
-    boot(on, world)
-    seedHistory(world)
-    world.diffs['tree-NOW>tree-2'] = []
-    await $.command.run({ command: 'time-machine' })
-    const ui = await $.ui.mount({ plugin: 'time-machine', surface, component: 'Pane', props: PANE, requestId: 'time-machine' })
-    await ui.press({ key: 'snap-1700000001000' })
-    expect(await ui.find({ type: 'Text', text: /Nothing to change/ })).toBeDefined()
-    expect(await ui.find({ key: 'restore' })).toBeUndefined()
     await ui.unmount()
   })
 

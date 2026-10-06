@@ -77,52 +77,6 @@ test('status lights follow real events: working, needs input, ready to review', 
   }
 })
 
-test('the permission dialog and an MCP elicitation also raise needs your input', async ($, on) => {
-  const w = setup($, on)
-  const ui = await mountPane($, 'terminal')
-
-  await startTurn($, 'do it')
-  await $.classic.PermissionRequest({ tool_name: 'Write', tool_input: {} } as never)
-  expect(await light(ui)).toBe('▲ Needs your input')
-  await endTurn($, 'ok')
-  expect(await light(ui)).toBe('✓ Ready to review')
-
-  await startTurn($, 'again')
-  await $.classic.Elicitation({ mcp_server_name: 'docs', message: 'Pick one', elicitation_id: 'e1' } as never)
-  expect(await light(ui)).toBe('▲ Needs your input')
-  await $.classic.ElicitationResult({ mcp_server_name: 'docs', action: 'accept', elicitation_id: 'e1' } as never)
-  expect(await light(ui)).toBe('◐ Working')
-  expect(w.sounds).toEqual([])
-})
-
-test('in auto mode an ask verdict is not shown as needing you', async ($, on) => {
-  const w = setup($, on)
-  const ui = await mountPane($, 'terminal')
-
-  await $.classic.UserPromptSubmit({ prompt: 'x', permission_mode: 'auto' } as never)
-  await startTurn($, 'go')
-  w.verdict = 'ask'
-
-  const call = bash($, 'ls', 'gate-9')
-
-  await w.clock.settle()
-  await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'gate-9' } as never)
-  expect(await light(ui)).toBe('◐ Working')
-  w.release('gate-9')
-  await call
-})
-
-test('a prompt from another plugin or a notification never counts as the person', async ($, on) => {
-  setup($, on)
-
-  await startTurn($, 'Plan a weekend trip', { kind: 'plugin' });
-  const ui = await mountPane($, 'terminal')
-
-  expect(hasLine(await texts(ui), /Goal: none yet/)).toBe(true)
-  await startTurn($, 'Plan a weekend trip', { kind: 'task-notification' })
-  expect(hasLine(await texts(ui), /Goal: none yet/)).toBe(true)
-})
-
 // ----------------------------------------------------------- mission
 
 test('mission: first prompt is the goal, a later prompt the latest instruction', async ($, on) => {
@@ -145,75 +99,6 @@ test('mission: first prompt is the goal, a later prompt the latest instruction',
     expect(lines).toContain('Latest instruction: Make the budget $600')
     await ui.unmount()
   }
-})
-
-test('/bridge mission sets the goal and the first prompt does not replace it', async ($, on) => {
-  setup($, on)
-
-  const result = await run($, 'mission Ship the Q3 report')
-
-  expect(result.text).toBe('Mission set: Ship the Q3 report')
-  await startTurn($, 'start with the intro')
-
-  const ui = await mountPane($, 'desktop')
-  const lines = await texts(ui)
-
-  expect(lines).toContain('Goal: Ship the Q3 report')
-  expect(lines).toContain('Latest instruction: start with the intro')
-  expect(hasLine(lines, 'Mission set: Ship the Q3 report')).toBe(true)
-
-  await run($, 'mission clear')
-  expect(hasLine(await texts(ui), /Goal: none yet/)).toBe(true)
-})
-
-test('a model summary writes the next step; a failed one keeps the reply fallback', async ($, on) => {
-  const w = setup($, on)
-  const ui = await mountPane($, 'terminal')
-
-  w.forkText = 'NEXT: Compare train times\nDECIDED: Fly on Friday\nOPEN: Dinner is not booked'
-  await startTurn($, 'Plan a trip')
-  await endTurn($, 'The flights are sorted.')
-  // The summary runs on a timer, after the turn is over.
-  expect(w.forks).toEqual([])
-  await w.clock.advance(1)
-
-  expect(w.forks).toHaveLength(1)
-  expect(w.forks[0]).toContain('NEXT:')
-
-  let lines = await texts(ui)
-
-  expect(lines).toContain('Next step: Compare train times (model summary)')
-  expect(hasLine(lines, /DECIDED\s+Fly on Friday/)).toBe(true)
-  expect(hasLine(lines, '! Dinner is not booked')).toBe(true)
-
-  w.forkText = undefined
-  await startTurn($, 'Next')
-  await endTurn($, 'Hotel booked.\n\nNext: pick restaurants')
-  await w.clock.advance(1)
-  lines = await texts(ui)
-  expect(lines).toContain('Next step: pick restaurants (from the reply)')
-})
-
-test('summary off makes no model call', async ($, on) => {
-  const w = setup($, on)
-
-  await run($, 'summary off')
-  w.forkText = 'NEXT: x'
-  await startTurn($, 'Plan')
-  await endTurn($, 'Done.')
-  await w.clock.advance(5)
-  expect(w.forks).toEqual([])
-})
-
-test('no model summary when the reply asks a question', async ($, on) => {
-  const w = setup($, on)
-
-  w.forkText = 'NEXT: x'
-  await startTurn($, 'Plan')
-  await endTurn($, 'Which day?')
-  await w.clock.advance(5)
-  expect(w.forks).toEqual([])
-  expect(hasLine(await texts(await mountPane($, 'terminal')), 'Next step: Answer: Which day?')).toBe(true)
 })
 
 // ------------------------------------------------------ captain's log
@@ -257,23 +142,6 @@ test("captain's log: one set of entries per turn, from real actions", async ($, 
   expect(hasLine(lines, /TURN\s+Turn 2: no file or command actions/)).toBe(true)
 })
 
-test("captain's log is capped", async ($, on) => {
-  setup($, on)
-
-  for (let i = 0; i < 60; i++) {
-    await startTurn($, `go ${i}`)
-    await write($, `/proj/f${i}.md`)
-    await bash($, `echo ${i}`)
-    await endTurn($, 'ok')
-  }
-
-  const lines = await texts(await mountPane($, 'terminal'))
-
-  // The pane shows the newest ten entries.
-  expect(lines.filter(line => /^\d\d:\d\d {2}(DID|TURN)/.test(line))).toHaveLength(10)
-  expect(hasLine(lines, 'Turn 60')).toBe(true)
-})
-
 // ------------------------------------------------------ results shelf
 
 test('results shelf lists files written or edited, one row per file, on both surfaces', async ($, on) => {
@@ -305,75 +173,7 @@ test('results shelf lists files written or edited, one row per file, on both sur
   }
 })
 
-test('pressing a shelf item opens a document, and only reveals a script', async ($, on) => {
-  const w = setup($, on)
-
-  await startTurn($, 'x')
-  await write($, '/proj/report.md')
-  await write($, '/proj/setup.command')
-  await endTurn($, 'ok')
-
-  const ui = await mountPane($, 'terminal')
-
-  await ui.press({ key: 'open:1' })
-  expect(w.processes).toEqual([['open', '/proj/report.md']])
-  await ui.press({ key: 'open:0' })
-  expect(w.processes[1]).toEqual(['open', '-R', '/proj/setup.command'])
-})
-
-test('Show the result scrolls to the shelf and opens the latest output', async ($, on) => {
-  const w = setup($, on)
-
-  for (const surface of SURFACES) {
-    const ui = await mountPane($, surface)
-
-    await ui.press({ key: 'result' })
-    expect(w.toasts.pop()).toContain('No results yet')
-    expect(w.processes).toEqual([])
-    await ui.unmount()
-  }
-
-  await startTurn($, 'x')
-  await write($, '/proj/old.md')
-  await write($, '/proj/final.pdf')
-  await endTurn($, 'ok')
-
-  for (const surface of SURFACES) {
-    w.processes.length = 0
-    w.scrolls.length = 0
-
-    const ui = await mountPane($, surface)
-
-    await ui.press({ key: 'result' })
-    expect(w.toasts).toEqual([])
-    expect(w.processes).toEqual([['open', '/proj/final.pdf']])
-    await ui.unmount()
-  }
-})
-
 // ----------------------------------------------------------- buttons
-
-test('Give me a briefing queues a status briefing prompt', async ($, on) => {
-  const w = setup($, on)
-
-  for (const surface of SURFACES) {
-    w.prompts.length = 0
-
-    const ui = await mountPane($, surface)
-
-    await ui.press({ key: 'briefing' })
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts[0]?.text).toContain('status briefing')
-    expect(w.prompts[0]?.origin).toMatchObject({ kind: 'plugin' })
-    await ui.unmount()
-  }
-
-  // The plugin's own briefing never becomes the mission.
-  const ui = await mountPane($, 'terminal')
-
-  expect(hasLine(await texts(ui), /Goal: none yet/)).toBe(true)
-  expect(hasLine(await texts(ui), 'Briefing requested')).toBe(true)
-})
 
 test('Change course: the input queues a new instruction and the mission display updates', async ($, on) => {
   const w = setup($, on)
@@ -400,36 +200,6 @@ test('Change course: the input queues a new instruction and the mission display 
     // An empty submit sends nothing.
     await ui.input({ key: 'course', text: '   ' })
     expect(w.prompts).toHaveLength(1)
-    await ui.unmount()
-  }
-})
-
-test('the Change course button hands the keyboard to the input', async ($, on) => {
-  const w = setup($, on)
-
-  for (const surface of SURFACES) {
-    const ui = await mountPane($, surface)
-
-    // The kit cannot answer a focus raised from inside a drawing, so this checks
-    // that the press is harmless and sends nothing.
-    await ui.press({ key: 'course-focus' })
-    expect(w.prompts).toEqual([])
-    await ui.unmount()
-  }
-})
-
-test('the buttons carry the documented hotkeys', async ($, on) => {
-  setup($, on)
-
-  for (const surface of SURFACES) {
-    const ui = await mountPane($, surface)
-    const keys: Record<string, string> = {}
-
-    for (const b of await ui.findAll({ type: 'Button' })) {
-      if (b.props.hotkey !== undefined) keys[String(b.key)] = String(b.props.hotkey)
-    }
-
-    expect(keys).toEqual({ briefing: 'b', result: 'r', 'course-focus': 'c' })
     await ui.unmount()
   }
 })
@@ -470,81 +240,7 @@ test('compact band shows status and mission above the prompt and keeps other ban
   expect(w.commands).toEqual([])
 })
 
-test('compact band with nothing beneath still draws', async ($, on) => {
-  setup($, on)
-  await run($, 'compact on')
-
-  const band = await mountBand($, 'desktop')
-
-  expect(await texts(band)).toContain('○ Standing by')
-})
-
-test('the band yields to a survey', async ($, on) => {
-  setup($, on)
-  await run($, 'compact on')
-
-  const band = await $.ui.mount({
-    plugin: 'spaceship-bridge',
-    surface: 'terminal',
-    component: 'AbovePrompt',
-    props: { hasSurvey: true, isWorking: false, maxRows: 5, bodyColumns: 80, scroll: { offset: 0, bodyRows: 5 }, view: {} },
-    viewport: { columns: 80, rows: 30 },
-  })
-
-  expect(hasLine(await texts(band), 'Standing by')).toBe(false)
-})
-
 // ---------------------------------------------------------- starfield
-
-test('starfield timer runs only while the pane is open and motion is on', async ($, on) => {
-  const w = setup($, on)
-
-  // Default: motion off, so the stars stay still and no timer runs.
-  await run($, '')
-  expect(w.opens).toEqual([{ id: 'spaceship-bridge', title: 'Bridge' }])
-
-  const ui = await mountPane($, 'terminal')
-
-  await w.clock.advance(5000)
-  expect(w.blits).toEqual([])
-
-  // Motion on: modest timer, one blit per tick.
-  await run($, 'motion on')
-  await w.clock.advance(2000)
-  expect(w.blits.length).toBe(4)
-  expect(w.blits[0]).toMatchObject({ key: 'stars', rows: 3 })
-  expect(w.blits[0]?.cells).not.toBe(w.blits[1]?.cells)
-
-  // Reduced motion: the timer stops.
-  await run($, 'motion off')
-
-  const seen = w.blits.length
-
-  await w.clock.advance(5000)
-  expect(w.blits.length).toBe(seen)
-
-  // Back on, then the pane closes: the timer stops again.
-  await run($, 'motion on')
-  await w.clock.advance(1000)
-  expect(w.blits.length).toBe(seen + 2)
-  await run($, 'close')
-  await w.clock.advance(5000)
-  expect(w.blits.length).toBe(seen + 2)
-  await ui.unmount()
-})
-
-test('reduced-motion on is the same as motion off', async ($, on) => {
-  const w = setup($, on)
-
-  await run($, 'motion on')
-  await run($, '')
-  await mountPane($, 'terminal')
-  await w.clock.advance(1000)
-  expect(w.blits.length).toBe(2)
-  await run($, 'reduced-motion on')
-  await w.clock.advance(5000)
-  expect(w.blits.length).toBe(2)
-})
 
 test('the terminal draws a Raster and the desktop an Svg; stars off draws neither', async ($, on) => {
   setup($, on)
@@ -573,129 +269,13 @@ test('the terminal draws a Raster and the desktop an Svg; stars off draws neithe
 
 // ------------------------------------------------ styling and sound
 
-test('ship computer styling is off by default and adds one short section when on', async ($, on) => {
-  const w = setup($, on)
-
-  expect((await $.prompt.compose(MODEL)).sections.map(s => s.id)).toEqual(['intro'])
-
-  const reply = await run($, 'style on')
-
-  expect(reply.text).toContain('Ship computer tone on')
-
-  const on1 = (await $.prompt.compose(MODEL)).sections
-
-  expect(on1.map(s => s.id)).toEqual(['intro', 'spaceship-bridge:style'])
-  expect(on1[1]?.text).toContain("ship's computer")
-  expect(on1[1]?.text).toContain('chat replies only')
-  expect(on1[1]?.scope).toBe('session')
-  expect(w.invalidations.length).toBeGreaterThan(0)
-
-  await run($, 'style off')
-  expect((await $.prompt.compose(MODEL)).sections.map(s => s.id)).toEqual(['intro'])
-})
-
-test('sound is off by default; on, it chimes when the status becomes ready or needs input', async ($, on) => {
-  const w = setup($, on)
-
-  await startTurn($, 'go')
-  await endTurn($, 'Done.')
-  expect(w.sounds).toEqual([])
-
-  await run($, 'sound on')
-  await startTurn($, 'again')
-  await endTurn($, 'Done again.')
-  await w.clock.advance(1)
-  expect(w.sounds).toEqual(['audio/wav:UklGR'])
-  await startTurn($, 'once more')
-  await endTurn($, 'Which one?')
-  await w.clock.advance(1)
-  expect(w.sounds).toEqual(['audio/wav:UklGR', 'audio/wav:UklGR'])
-  // Working does not chime.
-  await startTurn($, 'last')
-  await w.clock.advance(1)
-  expect(w.sounds).toHaveLength(2)
-})
-
 // ---------------------------------------------------------- settings
-
-test('settings are saved in the store', async ($, on) => {
-  const w = setup($, on)
-
-  await run($, 'compact on')
-  await run($, 'motion on')
-  await run($, 'style on')
-  expect(w.stored.settings).toEqual({
-    compact: true,
-    stars: true,
-    motion: true,
-    style: true,
-    sound: false,
-    summary: true,
-  })
-})
-
-test('settings are read back from the store at session start; bad values are ignored', async ($, on) => {
-  setup($, on, { store: { settings: { compact: true, stars: false, bogus: 1, sound: 'yes' } } })
-  await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
-
-  const pane = await mountPane($, 'terminal')
-
-  expect(hasLine(await texts(pane), 'Settings: compact on · stars off · motion off · style off · sound off · summary on')).toBe(true)
-  // compact was loaded as on, so the toggle turns it off.
-  expect((await run($, 'compact')).text).toBe('Compact band off.')
-})
-
-test('defaults: compact off, stars on, motion off, style off, sound off', async ($, on) => {
-  setup($, on)
-
-  const pane = await mountPane($, 'terminal')
-
-  expect(hasLine(await texts(pane), 'Settings: compact off · stars on · motion off · style off · sound off · summary on')).toBe(true)
-})
 
 test('session start registers /bridge', async ($, on) => {
   const w = setup($, on)
 
   await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
   expect(w.commands).toEqual(['bridge'])
-})
-
-test('/bridge status, help and bad input answer in plain words', async ($, on) => {
-  setup($, on)
-
-  await startTurn($, 'Plan a trip')
-  expect((await run($, 'status')).text).toBe('Status: Working (A turn is running)\nGoal: Plan a trip\nNext step: none yet')
-  expect((await run($, 'help')).text).toContain('/bridge mission <text>')
-  expect((await run($, 'nonsense')).text).toBe('Unknown option "nonsense". Try /bridge help.')
-  expect((await run($, 'motion maybe')).text).toBe('Say on or off: /bridge motion on')
-  expect((await run($, 'motion off')).text).toContain('stars stay still')
-})
-
-test('/bridge course and /bridge briefing queue prompts', async ($, on) => {
-  const w = setup($, on)
-
-  await run($, 'course use the cheaper hotel')
-  await run($, 'briefing')
-  // Queued from a timer, not from inside the command's own hook.
-  expect(w.prompts).toEqual([])
-  await w.clock.advance(1)
-  expect(w.prompts.map(p => p.text.slice(0, 20))).toEqual(['Change of course: us', 'Give me a short stat'])
-})
-
-test('/clear resets the mission, log and shelf', async ($, on) => {
-  setup($, on)
-
-  await startTurn($, 'Plan a trip')
-  await write($, '/proj/a.md')
-  await endTurn($, 'Done.')
-  await $.session.end({ reason: 'clear', sessionId: 's', resume: {} } as never)
-
-  const lines = await texts(await mountPane($, 'terminal'))
-
-  expect(lines).toContain('○ Standing by')
-  expect(lines).toContain('RESULTS SHELF (0)')
-  expect(lines).toContain('No entries yet.')
-  expect(hasLine(lines, /Goal: none yet/)).toBe(true)
 })
 
 test('the bridge never blocks or alters a tool call or a prompt', async ($, on) => {

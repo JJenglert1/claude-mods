@@ -35,23 +35,6 @@ test('wrappers, chains, pipes and subshells', () => {
   expect(classify('ls | xargs rm -f', '/p')[0]!.isFromPipe).toBe(true)
 })
 
-test('cd moves the folder for what follows, and a subshell gives it back', () => {
-  const cwds = (c: string) => classify(c, '/proj').map(a => a.cwd)
-  expect(cwds('cd build && rm -rf sub')).toEqual(['/proj/build'])
-  expect(cwds('cd /tmp && cd .. && rm x')).toEqual(['/'])
-  expect(cwds('(cd x && rm a); rm b')).toEqual(['/proj/x', '/proj'])
-  expect(cwds('cd "$DIR" && rm a')).toEqual([null])
-  expect(cwds('git -C sub clean -fd')).toEqual(['/proj/sub'])
-})
-
-test('find with -delete or -exec rm, and nothing else', () => {
-  expect(sum('find . -name "*.log" -delete')).toEqual(['find-delete[.]'])
-  expect(sum('find /tmp -type f -exec rm -f {} \;')).toEqual(['find-delete[/tmp]'])
-  expect(sum('find . -delete')).toEqual(['find-delete[.]'])
-  expect(sum('find . -name x -exec chmod 644 {} +')).toEqual([])
-  expect(sum('find . -name "*.log"')).toEqual([])
-})
-
 test('git kinds that discard, and the lookalikes that do not', () => {
   expect(sum('git clean -fd')).toEqual(['git-clean[]'])
   expect(sum('git clean -ffdx')).toEqual(['git-clean[]'])

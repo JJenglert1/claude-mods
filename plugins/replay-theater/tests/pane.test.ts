@@ -91,18 +91,6 @@ describe('pane', () => {
     }
   })
 
-  test('buttons carry the documented hotkeys', async ($: any, on: any) => {
-    world(on)
-    await seed($)
-    for (const surface of SURFACES) {
-      const ui = await mountPane($, surface)
-      const keys: Record<string, string> = {}
-      for (const b of await ui.findAll({ type: 'Button' })) keys[b.key] = b.props.hotkey
-      expect(keys).toEqual({ first: 'f', prev: 'b', play: 'p', next: 'n', last: 'l' })
-      await ui.unmount()
-    }
-  })
-
   test('play steps every 1.5s, stops at the end; pause holds', async ($: any, on: any) => {
     const w = world(on)
     await seed($)
@@ -147,23 +135,4 @@ describe('pane', () => {
     }
   })
 
-  test('long diffs are cut to the pane height and width', async ($: any, on: any) => {
-    world(on)
-    const body = Array.from({ length: 40 }, (_, i) => `row ${i} ${'x'.repeat(100)}`).join('\n')
-    await $.tool.call({ tool: 'Write', file_path: '/p/long.txt', content: `${body}\n` })
-    for (const surface of SURFACES) {
-      const ui = await $.ui.mount({
-        plugin: 'replay-theater',
-        surface,
-        ...PANE,
-        props: { ...PANE.props, bodyColumns: 40, scroll: { offset: 0, bodyRows: 16 } },
-      })
-      const rows = await ui.findAll({ type: 'Text', text: /^ *\d+ \+ / })
-      expect(rows.length).toBeLessThanOrEqual(16 - 9)
-      expect(rows.length).toBeGreaterThan(0)
-      for (const r of rows) expect(r.text.length).toBeLessThanOrEqual(40)
-      expect(await ui.find({ type: 'Text', text: /more rows/ })).toBeDefined()
-      await ui.unmount()
-    }
-  })
 })

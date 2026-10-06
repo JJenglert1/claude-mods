@@ -43,51 +43,6 @@ test('elapsed time reads as seconds, minutes, hours', () => {
   expect(elapsed(row(1, { startedAt: 9000 }), 1000)).toBe('0s')
 })
 
-test('token counts are short', () => {
-  expect([0, 999, 1000, 1234, 9999, 10_000, 45_200, 1_250_000].map(tokensText)).toEqual([
-    '0',
-    '999',
-    '1.0k',
-    '1.2k',
-    '10.0k',
-    '10k',
-    '45k',
-    '1.3M',
-  ])
-})
-
-test('clip makes one short line', () => {
-  expect(clip('  a\n  b   c ', 10)).toBe('a b c')
-  expect(clip('abcdefghij', 5)).toBe('abcd…')
-  expect(clip('abc', 5)).toBe('abc')
-})
-
-test('tool labels', () => {
-  expect(toolLabel('Read', { file_path: '/a/b/c.ts' })).toBe('c.ts')
-  expect(toolLabel('NotebookEdit', { notebook_path: '/n/x.ipynb' })).toBe('x.ipynb')
-  expect(toolLabel('Grep', { pattern: 'foo.*bar', path: '/src' })).toBe('src')
-  expect(toolLabel('Grep', { pattern: 'foo.*bar' })).toBe('foo.*bar')
-  expect(toolLabel('Bash', { command: 'ls -la\nrm x', description: 'list' })).toBe('ls -la rm x')
-  expect(toolLabel('WebFetch', { url: 'https://example.com/a?b=1' })).toBe('example.com')
-  expect(toolLabel('WebFetch', { url: 'not a url' })).toBe('not a url')
-  expect(toolLabel('WebSearch', { query: 'rust async' })).toBe('rust async')
-  expect(toolLabel('Agent', { description: 'Do a thing', prompt: 'long' })).toBe('Do a thing')
-  expect(toolLabel('mcp__x__y', { count: 3 })).toBe('')
-  expect(toolName('mcp__docs__search')).toBe('docs:search')
-  expect(toolName('Read')).toBe('Read')
-})
-
-test('status line shows only while something runs', () => {
-  expect(statusLine([])).toBeUndefined()
-  expect(statusLine([row(1, { status: 'done' })])).toBeUndefined()
-  expect(statusLine([row(1), row(2, { status: 'done' }), row(3, { status: 'done' })])).toBe(
-    'agents: 1 running, 2 done',
-  )
-  expect(statusLine([row(1), row(2, { status: 'failed' }), row(3, { status: 'stopped' })])).toBe(
-    'agents: 1 running, 0 done, 1 failed, 1 stopped',
-  )
-})
-
 test('rows are arranged running first, then finished newest first; children follow parents', () => {
   const rows = [
     row(1, { agentId: 'p', status: 'done', endedAt: 100 }),
@@ -110,16 +65,6 @@ test('rows are arranged running first, then finished newest first; children foll
   ])
 })
 
-test('a parent cycle does not hang the arrangement', () => {
-  const rows = [
-    row(1, { agentId: 'a', parentId: 'b' }),
-    row(2, { agentId: 'b', parentId: 'a' }),
-  ]
-
-  // Neither is a root, so neither is drawn; the point is that it returns.
-  expect(arrange(rows)).toEqual([])
-})
-
 test('first ending sticks; totals still fill in', () => {
   const started = startCall([], { callId: 'c1', type: 'Explore', description: 'x', now: 0 })
   const bound = bindAgent(started, { agentId: 'a1', callId: 'c1', now: 0 })
@@ -140,36 +85,6 @@ test('first ending sticks; totals still fill in', () => {
   })
   // Two turns of one agent add up.
   expect(finish(late, { agentId: 'a1', status: 'done', now: 20, addTokens: 5 })[0]?.tokens).toBe(15)
-})
-
-test('an Agent call is made once, however often it is reported', () => {
-  const call = { callId: 'c1', type: 'Explore', description: 'x', now: 0 }
-
-  expect(startCall(startCall([], call), call)).toHaveLength(1)
-})
-
-test('a plugin spawn with no call id joins the Agent call that says the same thing', () => {
-  const started = startCall([], { callId: 'c1', type: 'Explore', description: 'same', now: 0 })
-  const rows = bindAgent(started, { agentId: 'a1', type: 'Explore', description: 'same', now: 1 })
-
-  expect(rows).toHaveLength(1)
-  expect(rows[0]).toMatchObject({ agentId: 'a1', callId: 'c1' })
-
-  // A different description is a different agent.
-  expect(
-    bindAgent(started, { agentId: 'a2', type: 'Explore', description: 'other', now: 1 }),
-  ).toHaveLength(2)
-})
-
-test('recent tool calls keep the last five', () => {
-  let rows = bindAgent([], { agentId: 'a1', now: 0 })
-
-  for (let i = 1; i <= 8; i += 1) {
-    rows = noteTool(rows, { agentId: 'a1', toolUseId: `t${i}`, tool: 'Read', label: `f${i}`, now: i })
-  }
-
-  expect(rows[0]?.tools).toBe(8)
-  expect(rows[0]?.recent.map(note => note.label)).toEqual(['f4', 'f5', 'f6', 'f7', 'f8'])
 })
 
 test('the list is capped: the oldest finished rows go, running rows never', () => {

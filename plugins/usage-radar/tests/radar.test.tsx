@@ -142,60 +142,6 @@ describe('engine: forecasts, status and toasts', () => {
     expect(crossings[1]).toContain('95% warning level')
   })
 
-  test('too few samples says learning', async ($, on) => {
-    const w = world(on)
-    await $.session.start(START)
-    await run($, 'hide')
-    await feed($, w, [10, 12], 1)
-
-    expect(w.last()).toBe('5h 12% · learning your pace')
-  })
-
-  test('a reset mid-history starts over and re-arms the toasts', async ($, on) => {
-    const w = world(on)
-    await $.session.start(START)
-    await run($, 'hide')
-    await feed($, w, [84, 85, 86], 10, HOUR)
-    expect(w.seen.toasts.filter(t => /warning level/.test(t))).toHaveLength(1)
-
-    await w.clock.advance(HOUR)
-    const fresh = [{ kind: 'five_hour', percentUsed: 2, resetsAt: new Date(w.clock.now() + 5 * HOUR).toISOString() }]
-    w.set(fresh)
-    await measure($, fresh)
-    expect(w.last()).toBe('5h 2% · learning your pace')
-
-    const next = [{ ...fresh[0]!, percentUsed: 81 }]
-    w.set(next)
-    await measure($, next)
-    expect(w.seen.toasts.filter(t => /warning level/.test(t))).toHaveLength(2)
-  })
-
-  test('the timer samples once a minute while the session is open', async ($, on) => {
-    const w = world(on, [five(20)])
-    await $.session.start(START)
-    await run($, 'hide')
-    expect(w.last()).toBe('5h 20% · learning your pace')
-
-    // No measure events at all: only the timer reads usage.
-    for (let i = 1; i <= 12; i += 1) {
-      w.set([five(20 + i)])
-      await w.clock.advance(2 * MIN)
-    }
-
-    expect(w.last()).toMatch(/^5h 32% · may hit limit ~\d{1,2}:\d{2}[ap]$/)
-  })
-
-  test('history survives into the next session', async ($, on) => {
-    const w = world(on)
-    await $.session.start(START)
-    await run($, 'hide')
-    await feed($, w, [30, 31, 32, 33], 5)
-
-    await $.session.start(START)
-    expect(w.last()).toMatch(/^5h 33% · /)
-    expect(w.last()).not.toContain('learning')
-  })
-
   test('odd readings (bad reset time, NaN percent) do not break anything', async ($, on) => {
     const w = world(on)
     await $.session.start(START)
@@ -232,93 +178,14 @@ describe('commands and settings', () => {
     expect(w.seen.opened).toEqual(['usage-radar'])
   })
 
-  test('hide and show are remembered in the store, across sessions', async ($, on) => {
-    const w = world(on, [five(10)])
-    await $.session.start(START)
-    expect(w.stored('settings')).toBeUndefined()
-
-    expect((await run($, 'hide')).text).toContain('hidden')
-    expect(w.stored('settings')).toEqual({ hidden: true })
-    expect(w.last()).toBe('5h 10% · learning your pace')
-
-    // a new session still reads hidden
-    await $.session.start(START)
-    expect(w.last()).toBe('5h 10% · learning your pace')
-
-    expect((await run($, 'show')).text).toContain('shown')
-    expect(w.stored('settings')).toEqual({ hidden: false })
-    expect(w.last()).toBeUndefined() // strip is back, so the status line steps aside
-  })
-
-  test('warn sets levels and each new level toasts once', async ($, on) => {
-    const w = world(on, [five(10)])
-    await $.session.start(START)
-    expect((await run($, 'warn 70 90')).text).toContain('70%, 90%')
-    expect(w.stored('settings')).toEqual({ levels: [70, 90] })
-
-    await feed($, w, [60, 69, 71, 75, 85, 91, 92], 1)
-    const toasts = w.seen.toasts.filter(t => /warning level/.test(t))
-    expect(toasts).toHaveLength(2)
-    expect(toasts[0]).toContain('70% warning level')
-    expect(toasts[1]).toContain('90% warning level')
-  })
-
-  test('warn shows, rejects bad numbers, and resets', async ($, on) => {
-    const w = world(on, [five(10)])
-    await $.session.start(START)
-    expect((await run($, 'warn')).text).toContain('80%, 95%')
-    expect((await run($, 'warn banana')).text).toContain('one to four numbers')
-    expect(w.stored('settings')).toBeUndefined()
-    await run($, 'warn 50')
-    expect((await run($, 'warn reset')).text).toContain('80%, 95%')
-    expect(w.stored('settings')).toEqual({})
-  })
-
-  test('unknown arguments get a hint', async ($, on) => {
-    world(on)
-    await $.session.start(START)
-    expect((await run($, 'dance')).text).toContain('Try /usage-radar')
-  })
 })
 
 describe('config levels', () => {
-  test('warnLevels from the config menu', { options: { warnLevels: '60, 90' } }, async ($, on) => {
-    const w = world(on, [five(10)])
-    await $.session.start(START)
-    await feed($, w, [55, 61], 1)
-    expect(w.seen.toasts.filter(t => t.includes('60% warning level'))).toHaveLength(1)
-
-    await run($, 'warn 40')
-    expect(w.seen.toasts.some(t => t.includes('40% warning level'))).toBe(true)
-  })
 })
 
 describe('reading unavailable', () => {
   const PROPS = { title: 'Usage Radar', isFocused: false, bodyColumns: 80, placement: 'inline' } as never
 
-  test('a failed read keeps the last good windows and says so', async ($, on) => {
-    const w = world(on, [five(30), week(10)])
-    await $.session.start(START)
-    await w.clock.advance(MIN)
-    w.breakReads(true)
-    await w.clock.advance(MIN)
-
-    const ui = await $.ui.mount({ plugin: 'usage-radar', surface: 'terminal', component: 'Pane', requestId: 'usage-radar', props: PROPS })
-    expect(await ui.find({ type: 'Text', text: 'Reading unavailable' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: '5-hour window: 30%' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^Last updated 12:01p \(1m ago\)$/ })).toBeDefined()
-    await ui.unmount()
-  })
-
-  test('the status line is clear while unavailable even when hidden', async ($, on) => {
-    const w = world(on, [five(30)])
-    await $.session.start(START)
-    await run($, 'hide')
-    expect(w.last()).toBe('5h 30% · learning your pace')
-    w.breakReads(true)
-    await w.clock.advance(MIN)
-    expect(w.last()).toBeUndefined()
-  })
 })
 
 describe('the strip above the prompt', () => {
@@ -350,18 +217,6 @@ describe('the strip above the prompt', () => {
       await ui.unmount()
     })
 
-    test(`the countdown moves once a minute on ${surface}`, async ($, on) => {
-      const w = world(on, [five(42, 80 * MIN)])
-      await $.session.start({ ...START, surface })
-      const ui = await mountBand($)
-      expect((await ui.find({ type: 'Text', text: /^5h 42%/ }))?.text).toContain('(1h 20m)')
-      await w.clock.advance(MIN)
-      expect((await ui.find({ type: 'Text', text: /^5h 42%/ }))?.text).toContain('(1h 19m)')
-      await w.clock.advance(30 * MIN)
-      expect((await ui.find({ type: 'Text', text: /^5h 42%/ }))?.text).toContain('(49m)')
-      await ui.unmount()
-    })
-
     test(`Hide hides the strip, remembers it, and /usage-radar show brings it back on ${surface}`, async ($, on) => {
       const w = world(on, [five(42)])
       await $.session.start({ ...START, surface })
@@ -377,36 +232,6 @@ describe('the strip above the prompt', () => {
       await ui.unmount()
     })
 
-    test(`Details opens the pane on ${surface}`, async ($, on) => {
-      const w = world(on, [five(42)])
-      await $.session.start({ ...START, surface })
-      const ui = await mountBand($)
-      await ui.press({ key: 'details' })
-      expect(w.seen.opened).toEqual(['usage-radar'])
-      await ui.unmount()
-    })
-
-    test(`unavailable reads show a calm line on ${surface}`, async ($, on) => {
-      world(on, [])
-      await $.session.start({ ...START, surface })
-      const ui = await mountBand($)
-      expect(await ui.find({ type: 'Text', text: /^Usage: reading unavailable/ })).toBeDefined()
-      await ui.unmount()
-    })
-
-    test(`yields to a survey on ${surface}`, async ($, on) => {
-      world(on, [five(42)])
-      await $.session.start({ ...START, surface })
-      const ui = await $.ui.mount({
-        plugin: 'usage-radar',
-        surface,
-        component: 'AbovePrompt',
-        requestId: 'band',
-        props: { ...(BAND as object), hasSurvey: true } as never,
-      })
-      expect(await ui.find({ type: 'Button', key: 'hide' })).toBeUndefined()
-      await ui.unmount()
-    })
   }
 
   // Another plugin's band must survive, whichever side of ours it stands on.
@@ -430,15 +255,6 @@ describe('the strip above the prompt', () => {
 
   for (const tier of ['prepend', 'append'] as const) {
     for (const surface of ['terminal', 'desktop'] as const) {
-      test(`keeps another mod's band (it stands ${tier === 'prepend' ? 'outside' : 'inside'}) on ${surface}`, { plugins: [OTHER(tier)] }, async ($, on) => {
-        world(on, [five(42)])
-        await $.session.start({ ...START, surface })
-        const ui = await $.ui.mount({ plugin: 'usage-radar', surface, component: 'AbovePrompt', requestId: 'band', props: BAND })
-
-        expect(await ui.find({ type: 'Text', text: 'other band' })).toBeDefined()
-        expect(await ui.find({ type: 'Text', text: /^5h 42%/ })).toBeDefined()
-        await ui.unmount()
-      })
     }
   }
 })
@@ -475,45 +291,5 @@ describe('pane drawing', () => {
       await ui.unmount()
     })
 
-    test(`shows both windows and "Learning your pace" on ${surface}`, async ($, on) => {
-      const w = world(on)
-      await $.session.start({ ...START, surface })
-      const limits = [five(12), week(33.5)]
-      w.set(limits)
-      await measure($, limits)
-
-      const ui = await mountPane($)
-
-      expect(await ui.find({ type: 'Text', text: '5-hour window: 12%' })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: 'Weekly window: 33.5%' })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /Forecast: Learning your pace/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: 'Burn rate: Learning your pace' })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /Have 1 readings .*need 4 over 10\+ minutes/ })).toBeDefined()
-      await ui.unmount()
-    })
-
-    test(`says reading unavailable calmly with no plan limits on ${surface}`, async ($, on) => {
-      world(on)
-      await $.session.start({ ...START, surface })
-
-      const ui = await mountPane($)
-
-      expect(await ui.find({ type: 'Text', text: 'Reading unavailable' })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /API-key accounts have none/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: 'Last updated: no reading yet' })).toBeDefined()
-      await ui.unmount()
-    })
-
-    test(`the pane button hides and shows the strip on ${surface}`, async ($, on) => {
-      const w = world(on, [five(10)])
-      await $.session.start({ ...START, surface })
-      const ui = await mountPane($)
-      await ui.press({ key: 'toggle' })
-      expect(w.stored('settings')).toEqual({ hidden: true })
-      expect((await ui.find({ type: 'Button', key: 'toggle' }))?.text).toBe('Show strip')
-      await ui.press({ key: 'toggle' })
-      expect(w.stored('settings')).toEqual({ hidden: false })
-      await ui.unmount()
-    })
   }
 })

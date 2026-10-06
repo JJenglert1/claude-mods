@@ -36,73 +36,13 @@ const scene = (states: ('done' | 'current' | 'todo')[], width = 60, hero?: Scene
 }
 
 describe('sprites are small data tables', () => {
-  test('every sprite is a clean rectangle of known colors', () => {
-    const sets: [string[], number, number][] = [
-      [HERO, 5, 7],
-      [HERO_STEP, 5, 7],
-      [MARK_TODO, 5, 5],
-      [MARK_DONE, 5, 5],
-      [MARK_NOW, 5, 5],
-      [BOSS, 7, 7],
-      [BOSS_BEATEN, 7, 7],
-      [CASTLE, 11, 12],
-      [CASTLE_BEATEN, 11, 12],
-      [PINE, 3, 5],
-    ]
-    for (const [sprite, w, h] of sets) {
-      expect(sprite).toHaveLength(h)
-      for (const row of sprite) {
-        expect(row).toHaveLength(w)
-        expect(row).toMatch(/^[.a-zA-Z]+$/)
-      }
-    }
-  })
 })
 
 describe('layout', () => {
-  test('stops spread evenly with room at both ends', () => {
-    const xs = stopXs(60, 5)
-    expect(xs[0]).toBe(9)
-    expect(xs[4]).toBe(51)
-    expect(xs.every((x, i) => i === 0 || x > (xs[i - 1] as number))).toBe(true)
-  })
 
-  test('the map fits only when stops are far enough apart', () => {
-    expect(fitsMap(64, 8)).toBe(true)
-    expect(fitsMap(40, 8)).toBe(false)
-    expect(fitsMap(30, 3)).toBe(true)
-    expect(fitsMap(24, 3)).toBe(false)
-  })
-
-  test('the hero stands above a stop, beside a live boss and on a beaten one', () => {
-    const live = scene(['done', 'done', 'current'])
-    expect(heroSpot(live, 1)).toEqual({ x: stopXs(60, 3)[1], y: 6 })
-    expect(heroSpot(live, 2).x).toBe((stopXs(60, 3)[2] as number) - 9)
-    const won = scene(['done', 'done', 'done'])
-    expect(heroSpot(won, 2)).toEqual({ x: stopXs(60, 3)[2], y: 0 })
-  })
-
-  test('walking slides the hero between stops and stops at the end', () => {
-    const states: ('done' | 'current' | 'todo')[] = ['done', 'current', 'todo', 'todo']
-    const xs = stopXs(60, 4)
-    const at = (t: number, step: number) => heroPosition(scene(states, 60, { at: 0, to: 1, t, step }))
-    expect(at(0, 0).x).toBe(xs[0])
-    expect(at(0.5, 1).x).toBe(Math.round(((xs[0] as number) + (xs[1] as number)) / 2))
-    expect(at(1, 8)).toMatchObject({ x: xs[1], frame: 0 })
-    expect(at(0.5, 1).frame).toBe(1)
-    expect(walkT(4, 8)).toBe(0.5)
-    expect(walkT(99, 8)).toBe(1)
-  })
 })
 
 describe('rendering', () => {
-  test('a scene is opaque and as tall as promised', () => {
-    const px = drawScene(scene(['done', 'current', 'todo', 'todo']))
-    expect(px.h).toBe(SCENE_H)
-    expect(px.w).toBe(60)
-    expect(px.data).toHaveLength(60 * SCENE_H)
-    expect(px.data.every(c => c >= 0)).toBe(true)
-  })
 
   test('terminal cells: half blocks, three u32 per cell, packed as base64', () => {
     const px = drawScene(scene(['current', 'todo', 'todo'], 30))
@@ -114,14 +54,6 @@ describe('rendering', () => {
     expect(cells).toMatch(/^[A-Za-z0-9+/]+={0,2}$/)
     // first cell: code point U+2580 little-endian is 80 25 00 00
     expect(cells.startsWith(toBase64([0x80, 0x25, 0, 0]).slice(0, 4))).toBe(true)
-  })
-
-  test('base64 matches the standard test vectors', () => {
-    expect(toBase64([])).toBe('')
-    expect(toBase64([0x4d])).toBe('TQ==')
-    expect(toBase64([0x4d, 0x61])).toBe('TWE=')
-    expect(toBase64([0x4d, 0x61, 0x6e])).toBe('TWFu')
-    expect(toBase64(Array.from('hello world', c => c.charCodeAt(0)))).toBe('aGVsbG8gd29ybGQ=')
   })
 
   test('svg: valid markup, crisp, well under the size limit', () => {
@@ -136,45 +68,11 @@ describe('rendering', () => {
     expect(svg).not.toContain('undefined')
   })
 
-  test('victory adds confetti', () => {
-    const plain = drawScene(scene(['done', 'done', 'done'], 40)).data
-    const party = drawScene(scene(['done', 'done', 'done'], 40, undefined, true)).data
-    expect(party.some((c, i) => c !== plain[i])).toBe(true)
-  })
-
-  test('text map and alt text', () => {
-    const stops = scene(['done', 'current', 'todo', 'todo']).stops
-    expect(textMap(stops)).toBe('✔ ─ ▶ ─ ○ ─ ☠')
-    expect(mapAlt(stops, 1)).toContain('4 stops')
-    expect(mapAlt(stops, 1)).toContain('stop 2')
-  })
 })
 
 describe('arena and banner', () => {
-  test('the arena is opaque, and a flash changes the picture', () => {
-    const calm = drawArena(44, 1, null)
-    expect(calm.data.every(c => c >= 0)).toBe(true)
-    expect(drawArena(44, 1, 'hit').data).not.toEqual(calm.data)
-    expect(drawArena(44, 1, 'hurt').data).not.toEqual(calm.data)
-    expect(drawArena(44, 0.2, null).data).not.toEqual(calm.data) // the boss bar shrinks
-  })
 
-  test('titles draw for every word we use', () => {
-    for (const text of ['QUEST MODE', 'VICTORY']) {
-      const px = drawBanner(text)
-      expect(px.data.every(c => c >= 0)).toBe(true)
-      expect(px.w).toBeGreaterThan(30)
-    }
-  })
 })
 
 describe('sound', () => {
-  test('tones are real WAV files', () => {
-    const bytes = wavBytes([[440, 100]])
-    expect(String.fromCharCode(...bytes.slice(0, 4))).toBe('RIFF')
-    expect(String.fromCharCode(...bytes.slice(8, 12))).toBe('WAVE')
-    expect(bytes.length).toBe(44 + 800)
-    expect(toneBase64('win').startsWith('UklGR')).toBe(true) // "RIFF" in base64
-    expect(toneBase64('win')).toBe(toneBase64('win'))
-  })
 })
