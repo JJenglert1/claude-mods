@@ -7,7 +7,6 @@ const WALK_TOTAL = 150 * 8
 
 async function begin(w: World, ui: any, goal = 'Pitch to Acme') {
   w.model.reply = smartModel()
-  await ui.press({ key: 'kind:presentation' })
   await ui.input({ key: 'field', text: goal })
   await ui.press({ key: 'begin' })
 }
@@ -73,11 +72,11 @@ describe('the map', () => {
     const ui = await mountPane($, 'terminal', 66)
     await begin(w, ui)
 
-    const raster = await ui.find({ type: 'Raster' })
+    const raster = await ui.find({ key: 'map' })
     expect(raster).toBeDefined()
     expect(raster.key).toBe('map')
-    expect(raster.props).toMatchObject({ columns: 65, rows: 9 })
-    expect(raster.props.cells).toHaveLength(Math.ceil((65 * 9 * 12) / 3) * 4)
+    expect(raster.props).toMatchObject({ columns: 65, rows: 12 })
+    expect(raster.props.cells).toHaveLength(Math.ceil((65 * 12 * 12) / 3) * 4)
     expect(await ui.find({ type: 'Svg' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: '▶ ─ ○ ─ ○ ─ ○ ─ ☠' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'Stop 1 of 5' })).toBeDefined()
@@ -90,12 +89,13 @@ describe('the map', () => {
     const ui = await mountPane($, 'desktop')
     await begin(w, ui)
 
-    const svg = await ui.find({ type: 'Svg' })
+    const svg = (await ui.findAll({ type: 'Svg' })).find((x: any) => /Quest map/.test(x.props.alt))
     expect(svg).toBeDefined()
     expect(svg.props.source.startsWith('<svg')).toBe(true)
     expect(svg.props.source.length).toBeLessThan(131_072)
     expect(svg.props.alt).toContain('Quest map with 5 stops')
-    expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+    expect(await ui.find({ key: 'map' })).toBeUndefined()
+    expect((await ui.find({ type: 'Svg' })).props.alt).toBe('Quest Mode')
     expect(await ui.find({ type: 'Text', text: '▶ ─ ○ ─ ○ ─ ○ ─ ☠' })).toBeDefined()
     await ui.unmount()
   })
@@ -103,20 +103,20 @@ describe('the map', () => {
   test('a phone surface also gets the SVG; a narrow terminal falls back to the text map', async ($: any, on: any) => {
     const w = world(on)
     await startSession($)
-    const ui = await mountPane($, 'terminal', 40)
+    const ui = await mountPane($, 'terminal', 46)
     await begin(w, ui)
-    // 5 stops need about 40 columns: it fits
-    expect(await ui.find({ type: 'Raster' })).toBeDefined()
+    // 5 stops need about 45 columns: it fits
+    expect(await ui.find({ key: 'map' })).toBeDefined()
     await ui.unmount()
 
     // a narrow pane: no art, the text map only
     const narrow = await mountPane($, 'terminal', 30)
-    expect(await narrow.find({ type: 'Raster' })).toBeUndefined()
+    expect(await narrow.find({ key: 'map' })).toBeUndefined()
     expect(await narrow.find({ type: 'Text', text: /▶ ─ ○ ─ ○ ─ ○ ─ ☠/ })).toBeDefined()
     await narrow.unmount()
 
     const phone = await mountPane($, 'mobile')
-    expect(await phone.find({ type: 'Svg' })).toBeDefined()
+    expect((await phone.findAll({ type: 'Svg' })).some((x: any) => /Quest map/.test(x.props.alt))).toBe(true)
     await phone.unmount()
   })
 
@@ -126,7 +126,7 @@ describe('the map', () => {
     for (const surface of SURFACES) {
       const ui = await mountPane($, surface)
       await begin(w, ui)
-      const picture = async () => (await ui.find({ type: surface === 'terminal' ? 'Raster' : 'Svg' })).props[surface === 'terminal' ? 'cells' : 'source']
+      const picture = async () => (surface === 'terminal' ? await ui.find({ key: 'map' }) : (await ui.findAll({ type: 'Svg' })).find((x: any) => /Quest map/.test(x.props.alt))).props[surface === 'terminal' ? 'cells' : 'source']
       const before = await picture()
 
       await confirm(ui)
@@ -215,7 +215,7 @@ describe('the boss battle', () => {
       await begin(w, ui)
       await toBoss(w, ui)
 
-      expect(await ui.find({ type: 'Text', text: /☠ Stop 5 of 5: Boss battle: the skeptical client/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /☠ Chapter 5 of 5: Boss battle: the skeptical client/ })).toBeDefined()
       expect(await ui.find({ type: 'Input', key: 'answer' })).toBeUndefined() // not started yet
       await ui.press({ key: 'boss-start' })
       expect(w.modelPrompts[w.modelPrompts.length - 1]).toContain('tough, specific questions')
@@ -260,7 +260,7 @@ describe('the boss battle', () => {
     await ui.press({ key: 'boss-start' })
     expect(w.quest().boss.source).toBe('built-in')
     expect(w.quest().boss.questions).toHaveLength(5)
-    expect(await ui.find({ type: 'Text', text: /Why should we pick you/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /the right goal, and what happens if you do nothing/ })).toBeDefined()
 
     await ui.input({ key: 'answer', text: 'um no' })
     const round = w.quest().boss.rounds[0]
@@ -345,16 +345,17 @@ describe('the boss battle', () => {
     await phone.unmount()
   })
 
-  test('Ask Claude queues a prompt about the current stage', async ($: any, on: any) => {
+  test('boss prep notes: one button asks Claude to draft them, you still fight', async ($: any, on: any) => {
     const w = world(on)
     await startSession($)
     const ui = await mountPane($, 'terminal')
     await begin(w, ui)
-    await ui.press({ key: 'ask' })
-    expect(w.prompts[0]).toContain('stage 1')
-    expect(w.prompts[0]).toContain('Define the audience')
-    expect(w.prompts[0]).toContain('I will say when it is complete')
-    expect(w.quest().current).toBe(0)
+    await toBoss(w, ui)
+    await ui.press({ key: 'boss-prep' })
+    expect(w.prompts[0]).toContain('prep notes')
+    expect(w.prompts[0]).toContain('quest/05-boss-prep.md')
+    expect(w.prompts[0]).toContain('the skeptical client')
+    expect(w.quest().boss.status).toBe('idle')
     await ui.unmount()
   })
 })
@@ -372,6 +373,7 @@ describe('victory', () => {
       await ui.input({ key: 'field', text: '/work/audience.md' })
       await w.clock.advance(1000)
       await $.tool.call({ tool: 'Write', file_path: '/work/audience.md', content: 'The audience' })
+      await ui.press({ key: 'approve' })
       await w.clock.advance(WALK_TOTAL)
       await ui.press({ key: 'attach' })
       await ui.input({ key: 'field', text: '/work/outline.pdf' })
@@ -407,7 +409,7 @@ describe('victory', () => {
       expect(w.quest()).toBeNull()
       const history = w.saved('history') as any[]
       expect(history[history.length - 1]).toMatchObject({ goal: 'Pitch to Acme', status: 'finished', stages: 5, done: 5 })
-      expect(await ui.find({ type: 'Button', key: 'kind:study' })).toBeDefined()
+      expect(await ui.find({ type: 'Button', key: 'field-submit' })).toBeDefined()
       await ui.unmount()
     })
   }

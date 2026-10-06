@@ -27,7 +27,6 @@ function earlier(): Quest {
 
 async function begin(w: World, ui: any) {
   w.model.reply = smartModel()
-  await ui.press({ key: 'kind:presentation' })
   await ui.input({ key: 'field', text: 'Pitch to Acme' })
   await ui.press({ key: 'begin' })
 }
@@ -106,9 +105,8 @@ describe('saved progress', () => {
       const ui = await mountPane($, surface)
       const seen = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text).join(' | ')
       expect(await ui.find({ type: 'Text', text: /PAUSED/ }), seen).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /Stop 3 of 6: Build the slides/ }), seen).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /Chapter 3 of 6: Build the slides/ }), seen).toBeDefined()
       expect(await ui.find({ type: 'Text', text: '✔ ─ ✔ ─ ▶ ─ ○ ─ ○ ─ ☠' }), seen).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /Output file: \/work\/deck.pptx/ }), seen).toBeDefined()
       expect(await ui.find({ type: 'Text', text: '✔ Make a poster  (done)' }), seen).toBeDefined()
       await ui.unmount()
     }
@@ -117,8 +115,13 @@ describe('saved progress', () => {
     await $.command.run(RUN('resume'))
     await w.clock.advance(1000)
     await $.tool.call({ tool: 'Write', file_path: '/work/deck.pptx', content: 'slides' })
+    expect(w.quest().current).toBe(2) // the file is a result awaiting your verdict, not a finished stage
+    expect(w.quest().stages[2].readyAt).not.toBeNull()
+    const ui = await mountPane($, 'terminal')
+    await ui.press({ key: 'approve' })
     expect(w.quest().current).toBe(3)
     expect(w.quest().stages[2]).toMatchObject({ status: 'done', doneBy: 'file' })
+    await ui.unmount()
   })
 
   test('a quest in the middle of the boss battle resumes in the battle', async ($: any, on: any) => {
@@ -162,7 +165,7 @@ describe('saved progress', () => {
     await startSession($)
     expect(w.quest()).toBeNull()
     const ui = await mountPane($, 'terminal')
-    expect(await ui.find({ type: 'Button', key: 'kind:trip' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'field-submit' })).toBeDefined()
     expect(w.value('prefs')).toEqual({ sound: false, reduceMotion: false })
     await ui.unmount()
   })
@@ -210,7 +213,7 @@ describe('/quest pause, resume, abandon, status', () => {
     expect(w.saved('history')).toEqual([expect.objectContaining({ goal: 'Pitch to Acme', status: 'abandoned', done: 1, stages: 5 })])
     expect(w.statuses[w.statuses.length - 1]).toBeUndefined()
     expect((await $.command.run(RUN('abandon'))).text).toBe('No quest to abandon.')
-    expect(await ui.find({ type: 'Button', key: 'kind:study' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'field-submit' })).toBeDefined()
     await ui.unmount()
   })
 

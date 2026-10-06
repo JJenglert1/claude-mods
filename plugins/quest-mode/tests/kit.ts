@@ -29,8 +29,9 @@ export type ModelFn = (prompt: string) => ModelReply
 export type World = {
   clock: ReturnType<typeof mock.clock>
   /** Files on the fake disk: path to { size, mtimeMs }. */
-  files: Map<string, { size: number; mtimeMs: number }>
+  files: Map<string, { size: number; mtimeMs: number; text?: string }>
   prompts: string[]
+  statPaths: string[]
   modelPrompts: string[]
   toasts: string[]
   statuses: (string | undefined)[]
@@ -52,13 +53,17 @@ export type World = {
 
 export type WorldOptions = { store?: Record<string, unknown>; now?: number }
 
+/** The engine resolves relative paths against the working directory; the fake disk keys them as written. */
+const rel = (p: string) => p.replace(/^.*?\/plugins\/quest-mode\//, '')
+
 export function world(on: any, options: WorldOptions = {}): World {
   const clock = mock.clock(on, { now: options.now ?? T0 })
-  const files = new Map<string, { size: number; mtimeMs: number }>()
+  const files = new Map<string, { size: number; mtimeMs: number; text?: string }>()
   const w: World = {
     clock,
     files,
     prompts: [],
+    statPaths: [],
     modelPrompts: [],
     toasts: [],
     statuses: [],
@@ -125,17 +130,20 @@ export function world(on: any, options: WorldOptions = {}): World {
     return { value: { isAnswered: true, text: reply.text, usage: USAGE0 } }
   })
   on('fs.stat', (_$: any, e: any) => {
-    const f = files.get(e.path)
+    w.statPaths.push(e.path)
+    const f = files.get(rel(e.path))
     return f === undefined
       ? { deny: `ENOENT: ${e.path}` }
       : { value: { kind: 'file', size: f.size, mtimeMs: f.mtimeMs, isLink: false } }
   })
-  on('fs.exists', (_$: any, e: any) => ({ value: files.has(e.path) }))
+  on('fs.read', (_$: any, e: any) => (files.has(rel(e.path)) ? { value: files.get(rel(e.path))?.text ?? 'file text' } : { deny: `ENOENT: ${e.path}` }))
+  on('fs.exists', (_$: any, e: any) => ({ value: files.has(rel(e.path)) }))
   // The bottom of a tool call: a Write or Edit lands on the fake disk with the clock's time.
   on('tool.call', (_$: any, e: any) => {
-    if (e.tool === 'Write' || e.tool === 'Edit') files.set(e.file_path, { size: String(e.content ?? 'x').length, mtimeMs: clock.now() })
+    if (e.tool === 'Write' || e.tool === 'Edit') files.set(e.file_path, { size: String(e.content ?? 'x').length, mtimeMs: clock.now(), text: String(e.content ?? 'x') })
     return { result: {}, text: 'ok' }
   })
+  on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', (_$: any, e: any) => ({ text: e.answer }))
   // State is the engine's own (subscriptions and redraws included); this only watches the writes.
   on('state.set', async (_$: any, e: any, next: any) => {
@@ -148,6 +156,7 @@ export function world(on: any, options: WorldOptions = {}): World {
 }
 
 export const STAGES_JSON = JSON.stringify({
+  boss: 'the skeptical client',
   stages: [
     { title: 'Define the audience', sideQuests: ['Interview one stakeholder'] },
     { title: 'Outline the pitch', sideQuests: [] },

@@ -47,8 +47,8 @@
     {
       "name": "quest-mode",
       "source": "./plugins/quest-mode",
-      "description": "Turns a real task into a small retro RPG quest: a pixel map, a character, stages you confirm, and a boss battle (/quest).",
-      "version": "0.1.0"
+      "description": "Turns a goal into a retro RPG quest: Claude does each stage, you give the orders and the verdict, with a pixel map, XP and a boss battle (/quest).",
+      "version": "0.3.0"
     },
     {
       "name": "spaceship-bridge",

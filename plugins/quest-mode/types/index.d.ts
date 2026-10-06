@@ -32,6 +32,14 @@ export type QuestStage = {
   /** Files or links the person attached to this stage. */
   attached: string[]
   sideQuests: QuestSideQuest[]
+  /** The person's orders for Claude on this stage ("what matters most?"). */
+  direction: string
+  /** When Claude was last sent on this stage (ms), null if never. */
+  sentAt: number | null
+  /** When Claude's result file was found (ms): the stage now awaits the person's verdict. */
+  readyAt: number | null
+  /** How many times the person sent Claude back to revise. */
+  revisions: number
   status: 'todo' | 'done'
   /** How it was completed: the person confirmed, a file was found, or the boss was beaten. */
   doneBy: 'confirmed' | 'file' | 'battle' | null
@@ -75,6 +83,8 @@ export type Quest = {
   id: string
   kind: QuestKind
   goal: string
+  /** The tough critic the boss plays, picked to fit the goal ("the skeptical client"). */
+  bossName: string
   /** `draft`: stages are being edited. `active`: under way. `victory`: finished. */
   phase: 'draft' | 'active' | 'victory'
   paused: boolean
@@ -104,7 +114,7 @@ export type QuestPrefs = {
 
 /** Which one-line text field is open. */
 export type QuestField = {
-  kind: 'goal' | 'add' | 'rename' | 'output' | 'attach' | 'side'
+  kind: 'goal' | 'add' | 'rename' | 'output' | 'attach' | 'side' | 'revise'
   stageId?: string
 }
 
@@ -131,6 +141,22 @@ export type QuestUi = {
   notice: string | null
   walk: QuestWalk | null
   showAllLog: boolean
+  /** Text typed so far in the open field (so a button can submit it). */
+  draft: string
+  /** Extra goal lines added under the goal (the goal can run to several lines). */
+  goalLines: string[]
+  /** The line being typed in the "add details" field. */
+  detail: string
+  /** The next chat prompt becomes the quest goal. */
+  awaitingChat: boolean
+  /** A short flash in the boss arena: you hit the boss, or it hit you. Only set when motion is allowed. */
+  flash: 'hit' | 'hurt' | null
+  /** Claude's turn is running right now. */
+  claudeBusy: boolean
+  /** The "Your direction" line being typed for the current stage. */
+  direction: string
+  /** A short look at Claude's result file, for the verdict. */
+  preview: { stageId: string; text: string } | null
 }
 
 /** A short record kept after a quest ends or is abandoned. */

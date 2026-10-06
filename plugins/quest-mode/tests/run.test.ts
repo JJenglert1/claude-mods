@@ -6,7 +6,6 @@ import type { World } from './kit'
 /** Drafts and starts a presentation quest on the pane; the model gives 4 stages plus the boss. */
 async function begin(w: World, ui: any, goal = 'Pitch to Acme') {
   w.model.reply = smartModel()
-  await ui.press({ key: 'kind:presentation' })
   await ui.input({ key: 'field', text: goal })
   await ui.press({ key: 'begin' })
 }
@@ -20,7 +19,6 @@ describe('edit the stages before starting', () => {
       w.model.reply = smartModel()
       await startSession($)
       const ui = await mountPane($, surface)
-      await ui.press({ key: 'kind:presentation' })
       await ui.input({ key: 'field', text: 'Pitch to Acme' })
       const ids = w.quest().stages.map((s: any) => s.id)
 
@@ -74,7 +72,6 @@ describe('edit the stages before starting', () => {
     w.model.reply = smartModel()
     await startSession($)
     const ui = await mountPane($, 'terminal')
-    await ui.press({ key: 'kind:presentation' })
     await ui.input({ key: 'field', text: 'Pitch to Acme' })
     const before = w.modelPrompts.length
     w.model.reply = prompt => (prompt.includes('Suggest ') ? { text: '["Alpha","Beta","Gamma"]' } : 'error')
@@ -91,7 +88,7 @@ describe('edit the stages before starting', () => {
     await begin(w, ui)
     expect(w.quest()).toMatchObject({ phase: 'active', current: 0, paused: false })
     expect(w.statuses[w.statuses.length - 1]).toMatch(/^Quest: Pitch to Acme · stop 1\/5 · 0 done$/)
-    expect(await ui.find({ type: 'Text', text: /Stop 1 of 5: Define the audience/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Chapter 1 of 5: Define the audience/ })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'complete' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'begin' })).toBeUndefined()
     await ui.unmount()
@@ -128,7 +125,7 @@ describe('a stage completes only on your confirmation or a verified result', () 
       await ui.press({ key: 'confirm-yes' })
       expect(w.quest().current).toBe(1)
       expect(w.quest().stages[0]).toMatchObject({ status: 'done', doneBy: 'confirmed' })
-      expect(await ui.find({ type: 'Text', text: /Stop 2 of 5: Outline the pitch/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /Chapter 2 of 5: Outline the pitch/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /Stop 1 of 5 complete: Define the audience \(you confirmed\)/ })).toBeDefined()
       expect(w.toasts.some(t => /Stop 1 of 5 complete/.test(t))).toBe(true)
       await ui.unmount()
@@ -151,7 +148,7 @@ describe('a stage completes only on your confirmation or a verified result', () 
     await ui.unmount()
   })
 
-  test('a named output file that appears completes the stage; an unrelated file does not', async ($: any, on: any) => {
+  test('a result file that appears makes the stage "ready"; only your Approve completes it', async ($: any, on: any) => {
     const w = world(on)
     await startSession($)
     const ui = await mountPane($, 'terminal')
@@ -161,23 +158,26 @@ describe('a stage completes only on your confirmation or a verified result', () 
     await ui.input({ key: 'field', text: '/work/audience.md' })
     expect(w.quest().stages[0].output).toBe('/work/audience.md')
     expect(w.quest().stages[0].baseline).toMatchObject({ existed: false })
-    expect(await ui.find({ type: 'Text', text: /Output file: \/work\/audience.md/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Watching for/ })).toBeDefined()
 
     await $.tool.call({ tool: 'Write', file_path: '/work/other.md', content: 'hi' })
-    expect(w.quest().current).toBe(0)
+    expect(w.quest().stages[0].readyAt).toBeNull()
 
-    // "Check file" with nothing there says so
     await ui.press({ key: 'check' })
     expect(await ui.find({ type: 'Text', text: /Not found yet: \/work\/audience.md/ })).toBeDefined()
-    expect(w.quest().current).toBe(0)
 
     await w.clock.advance(1000)
     await $.tool.call({ tool: 'Write', file_path: '/work/audience.md', content: 'The audience is...' })
+    // the file alone does not move the hero
+    expect(w.quest().current).toBe(0)
+    expect(w.quest().stages[0].readyAt).not.toBeNull()
+    expect(await ui.find({ type: 'Text', text: /Claude's result is ready/ })).toBeDefined()
+    expect(w.toasts.some(t => /result is ready/.test(t))).toBe(true)
+
+    await ui.press({ key: 'approve' })
     expect(w.quest().current).toBe(1)
     expect(w.quest().stages[0]).toMatchObject({ status: 'done', doneBy: 'file' })
     expect(w.quest().log.some((l: any) => /output file found/.test(l.text))).toBe(true)
-    expect(w.toasts.some(t => /Stage verified/.test(t))).toBe(true)
     await ui.unmount()
   })
 
@@ -190,15 +190,18 @@ describe('a stage completes only on your confirmation or a verified result', () 
     await ui.press({ key: 'set-output' })
     await ui.input({ key: 'field', text: '/work/a.txt' })
     w.makeFile('/work/a.txt') // a script made it
-    expect(w.quest().current).toBe(0) // nothing looked yet
+    expect(w.quest().stages[0].readyAt).toBeNull() // nothing looked yet
     await ui.press({ key: 'check' })
+    expect(w.quest().stages[0].readyAt).not.toBeNull()
+    await ui.press({ key: 'approve' })
     expect(w.quest().current).toBe(1)
 
     await ui.press({ key: 'set-output' })
     await ui.input({ key: 'field', text: '/work/b.txt' })
     w.makeFile('/work/b.txt')
     await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't2', reason: 'answer' })
-    expect(w.quest().current).toBe(2)
+    expect(w.quest().stages[1].readyAt).not.toBeNull()
+    expect(w.quest().current).toBe(1)
     await ui.unmount()
   })
 
@@ -216,10 +219,12 @@ describe('a stage completes only on your confirmation or a verified result', () 
 
     await ui.press({ key: 'check' })
     expect(w.quest().current).toBe(0)
-    expect(await ui.find({ type: 'Text', text: /has not changed since this stage began/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /has not changed since Claude was sent/ })).toBeDefined()
 
     await w.clock.advance(5000)
     await $.tool.call({ tool: 'Edit', file_path: '/work/old.txt', content: 'changed!', old_string: 'a', new_string: 'b' })
+    expect(w.quest().stages[0].readyAt).not.toBeNull()
+    await ui.press({ key: 'approve' })
     expect(w.quest().current).toBe(1)
     await ui.unmount()
   })
@@ -247,7 +252,9 @@ describe('a stage completes only on your confirmation or a verified result', () 
     expect(w.quest().current).toBe(1) // paused: the file is not counted
     await ui.press({ key: 'pause' }) // resume
     await ui.press({ key: 'check' })
-    expect(w.quest().current).toBe(2) // it appeared while paused; once resumed, a new file is a verified result
+    expect(w.quest().stages[1].readyAt).not.toBeNull() // it appeared while paused; once resumed, it is a result awaiting your verdict
+    await ui.press({ key: 'approve' })
+    expect(w.quest().current).toBe(2)
     await ui.unmount()
   })
 })

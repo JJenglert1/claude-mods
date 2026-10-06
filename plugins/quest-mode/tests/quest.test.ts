@@ -319,10 +319,12 @@ describe('links, status and saved progress', () => {
     expect(parseCommand('sound')).toMatchObject({ cmd: 'bad' })
     expect(parseCommand('motion reduced')).toEqual({ cmd: 'motion', reduced: true })
     expect(parseCommand('motion full')).toEqual({ cmd: 'motion', reduced: false })
-    expect(parseCommand('trip 5 days in Lisbon')).toEqual({ cmd: 'start', kind: 'trip', goal: '5 days in Lisbon' })
-    expect(parseCommand('pitch Acme deal')).toEqual({ cmd: 'start', kind: 'presentation', goal: 'Acme deal' })
-    expect(parseCommand('trip')).toMatchObject({ cmd: 'bad' })
-    expect(parseCommand('dance')).toMatchObject({ cmd: 'bad' })
+    expect(parseCommand('trip 5 days in Lisbon')).toEqual({ cmd: 'start', kind: 'custom', goal: 'trip 5 days in Lisbon' })
+    expect(parseCommand('pitch Acme deal')).toEqual({ cmd: 'start', kind: 'custom', goal: 'pitch Acme deal' })
+    expect(parseCommand('trip')).toMatchObject({ cmd: 'start', goal: 'trip' })
+    expect(parseCommand('dance all night')).toEqual({ cmd: 'start', kind: 'custom', goal: 'dance all night' })
+    expect(parseCommand('resume')).toEqual({ cmd: 'resume' })
+    expect(parseCommand('resume Plan the offsite')).toEqual({ cmd: 'resume', goal: 'Plan the offsite' })
   })
 
   test('small text helpers', () => {

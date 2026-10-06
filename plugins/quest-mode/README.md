@@ -1,69 +1,75 @@
 # Quest Mode
 
-Turns a real task into a small retro RPG journey. You get a pixel-art map with your stages as stops on a path, a little hero who walks it, a quest log, optional side quests, and a boss battle at the end where Claude plays a tough skeptic and you practice your answers.
+Turns a goal into a retro RPG journey. You say what the quest is. Claude does the work stage by stage. You give the orders before and the verdict after. There is a pixel map with mountains, forest and a castle, a hero who levels up, loot from side quests, and a boss battle at the end.
 
-## The rule
+## The loop for every stage
 
-**A stage is complete only when you confirm it, or when its output file is found on disk.**
+1. **Your direction (optional).** One line: what matters most here, any must-haves. These are the hero's orders.
+2. **Claude does the work.** Press **▶ Send Claude on this stage** (hotkey `g`, or press Enter in the direction field). The mod queues a prompt with the quest goal, this chapter, the results of earlier chapters and your direction. Claude saves the result to `quest/<nn>-<stage>.md`. The mod sets that result file for you.
+3. **Live status.** While Claude's turn runs, the stage says "The hero sends Claude ahead... working".
+4. **Your verdict.** When the result file exists, the stage says "Claude's result is ready. Awaiting your verdict." with a short preview. Choose **Approve** (the stage completes, +100 XP, the hero moves), **Revise** (type feedback, Claude redoes it), or **Take over** (you did it; confirm and it is done).
 
-Claude writing text, saying "done", or writing some other file never moves the hero. Only these things can finish a stage:
+**The rule:** a stage is complete only when you say so. Approve Claude's result (its file must be on disk) or take over and confirm it yourself. Claude's text alone, or Claude writing a file, never completes a stage.
 
-1. **You press Complete stage and then confirm** ("Yes, it's done"). Two presses, so it cannot happen by accident.
-2. **A verified result:** you named an output file for the stage, and that file now exists, has content, and is new or changed since the stage began (checked with `$.fs`, after each file Claude writes and at the end of each turn, or when you press Check file). A file that already existed before the stage began only counts once it changes.
-3. **Winning the boss battle** (the boss stage only): you brought the boss to 0 HP with your own typed answers.
+Side quests are optional extras. Each has its own **Send Claude**, **Done** and **Skip**. Done drops loot (+25 XP) into your inventory. They never block the main path.
 
-The rule is printed on the quest screen so nobody has to remember it.
+The boss battle stays human-driven: you type the answers. One button, **Claude drafts prep notes**, asks Claude for likely questions and talking points first.
+
+Quiet buttons at the bottom of the stage: Attach, + Side quest, Result file, Check file, Pause, Sound, Motion, Abandon quest.
+
+## Starting a quest
+
+`/quest` opens one screen: **What is your quest?** Type the goal and press Enter or **Begin quest**. There are no quest types.
+
+- Goals can run to several lines. Add **details** under the goal with **+ Add line** (up to 5 extra lines), or press **Write it in chat**: the next message you send in the chat box becomes the whole goal (it does not go to Claude).
+- Claude charts 3 to 6 stages and picks a boss that fits (for example "the skeptical client" or "the picky editor"). If the model call fails, a generic set is used: Gather supplies, Scout the path, Forge it, Polish your work, and "the final reviewer".
+- Rename, add, remove and reorder stages, then **Start quest**.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `/quest` | Open the Quest Mode pane (pick a type, or see your current quest). |
-| `/quest <presentation\|study\|trip\|custom> <goal>` | Skip the pick screen. Example: `/quest trip 5 days in Lisbon in May`. |
-| `/quest resume` | Load your saved quest and carry on. |
-| `/quest pause` | Pause. Nothing can be completed while paused. |
-| `/quest abandon` | Give up the quest (a short record is kept). |
-| `/quest status` | One-line summary, no pane. |
+| `/quest` | Open the pane. |
+| `/quest <your goal>` | Start a quest from that goal right away. |
+| `/quest resume` | Load your saved quest and carry on. With text and no saved quest, it starts a quest from that text. |
+| `/quest pause` | Pause. Nothing can be sent or approved while paused. |
+| `/quest abandon` | Give up (a short record is kept). |
+| `/quest status` | One-line summary. |
 | `/quest sound on\|off` | Short tones at milestones. Off by default. |
-| `/quest motion reduced\|full` | Reduced: no walking animation, the hero jumps to the stop. |
+| `/quest motion reduced\|full` | Reduced: no walking and no flashes; the hero jumps to the stop. |
 
-Everything in the pane also has buttons with hotkeys (shown on the buttons).
+## Game feel
 
-## Demo script: prepare a client pitch
+- Pixel title banner, map with mountains, pines, landmarks for each stage, the hero walking between them, and the boss's castle at the end. Terminal: `Raster`. Desktop and others: `Svg`. A text map (`✔ ─ ▶ ─ ○ ─ ☠`) is always shown too.
+- Chapters, XP (100 per stage, 250 for the boss, 25 per side quest), levels every 150 XP, an inventory of loot, and toasts for level-ups and achievements (First Steps, Halfway There, Dragon Slayer).
+- Boss fight: arena art, boss HP and hero HP bars, attack text, and a flash when a blow lands (only when motion is allowed).
+- Victory: fanfare banner, final stats and links to the finished work (result files, attachments, files written during the quest). **Copy all paths** copies them.
+- Everything sits in rounded dialogue frames with one palette. Sound is off by default.
 
-1. Run `/quest`. Press **1** (Prepare a presentation). Type the goal, for example: `Pitch our onboarding service to Acme`, and press Enter.
-2. Claude drafts 3 to 6 stages (a built-in set appears if the model call fails). Try the buttons under each stage: **Rename**, **Up**, **Down**, **Remove**, and **Add stage**. The boss battle is always last. Press **Start quest** (hotkey `b`).
-3. The map shows your stages as stops, the hero above stop 1. Read the rule line. Optional: press **Set output file** (`o`) and type a path such as `pitch/outline.md`.
-4. Ask Claude to write that file. When it appears, the stage completes on its own and the hero walks to stop 2. (Or: press **Complete stage** (`c`), then **Yes, it's done** (`y`).)
-5. Try a side quest: on "Build the slides" press **Done** or **Skip** on "Add speaker notes". It is marked optional and never blocks you. **Add side quest** (`q`) adds your own.
-6. Press **Pause** (`p`), close Claude Code, open it again, run `/quest resume`. You are at the same stop.
-7. At the last stop, press **Start the battle** (`b`). Claude plays a skeptical client and asks five tough questions (for example "What is the biggest risk in your plan?"). Type an answer in the field and press Enter. Each answer gets a score, one or two sentences of feedback, and takes HP off the boss (the bar is on screen). Weak answers cost you a heart. Three lost hearts and you can **Rematch**.
-8. Reduce the boss to 0 HP and the stage completes. The **victory screen** lists your finished work: output files, files you attached (**Attach file or link**, `a`), and files Claude wrote during the quest. **Copy all paths** copies them.
+## Demo script: a client pitch
 
-If a text field is not available (a phone surface), **Fight in chat instead** (`t`) queues a prompt so the battle runs in the chat. You then confirm the stage yourself.
-
-## How it is built
-
-- `hooks/quest.ts`: all quest logic as pure functions (stages, editing rules, the completion rule, side quests, boss HP and hearts, grading parsers, victory links, command parsing). No `$` in there.
-- `hooks/art.ts`: the pixel art as small string tables (hero 5x7, markers 5x5, boss 7x7), a scene builder, and two renderers: terminal cells for `Raster` (half blocks, two pixel rows per cell) and SVG for the other surfaces.
-- `hooks/sound.ts`: tiny WAV tones built in memory for `$.audio.play`.
-- `hooks/register.tsx`: the hooks. Drawing state is in `$.state`; progress and settings are in `$.store` (`quest`, `prefs`, `history`).
-- Terminal: `Raster` map. Desktop and the rest: `Svg` map. Every surface also gets a one-line text map under the art (`✔ ─ ▶ ─ ○ ─ ☠`) which is also what a narrow pane shows.
+1. `/quest Pitch our onboarding service to Acme` (or type it in the pane). Add a line: "Audience: their CTO and CFO."
+2. Rename a stage if you like, then **Start quest**. See "Quest accepted!".
+3. On chapter 1, type a direction ("keep it to one page") and press **▶ Send Claude on this stage**. Watch the status; Claude saves `quest/01-....md`.
+4. Read the preview. Press **Revise** and type "add the budget angle", then **Approve** the new version. The hero walks to the next stop; you gain XP.
+5. Mark a side quest **Done** for loot.
+6. Repeat to the last stop. Optionally press **Claude drafts prep notes**, then **Start the battle** and answer the boss's tough questions. Win to see the victory screen with your files.
 
 ## Models
 
-Stages, boss questions and answer grades come from `$.model.complete`. If a call fails or the reply is unusable: stages fall back to a built-in set per quest type, questions fall back to a built-in set, and answers get a rough local check (answer length and detail) that says it is a rough check.
+Stages, the boss, boss questions and grades come from `$.model.complete`. If a call fails or the reply is unusable: a built-in stage set and boss, built-in questions, and a rough local grade (which says it is a rough check).
 
 ## Saved progress
 
-The quest is saved after every change. A new session loads it **paused**, shows a toast, and keeps the status line (`Quest: ... · stop 3/5 · 2 done · paused`). `/quest resume` carries on.
+Saved to `$.store` after every change. A new session loads the quest paused; `/quest resume` carries on.
 
-## Tests
+## Built from
 
-`claude plugin test .` runs pure-logic tests (quest rules, art, sound) and engine tests (both `terminal` and `desktop`, plus a `mobile` check for the chat fallback) with a mocked model, clock, store, disk and prompt queue.
+`hooks/quest.ts` (pure logic), `hooks/art.ts` (art tables and renderers), `hooks/sound.ts`, `hooks/register.tsx` (hooks and views). `claude plugin test .` covers logic and the pane on `terminal` and `desktop` (and a `mobile` check) with a mocked model, clock, store, disk and prompt queue.
 
 ## Limits
 
-- Only the model-free parts and the engine hooks are covered by tests. The pixel map and panes were not looked at in a live Claude Code session.
-- "Files written during the quest" means every file Claude wrote or edited while the quest was running, related or not.
-- A phone surface has no text field, so typing needs the chat fallback.
+- Not looked at in a live session by the author of 0.3.0; styling and the Claude loop were checked through the test kit only.
+- "Files written during the quest" means every file Claude wrote or edited while the quest was running.
+- A phone surface has no text field: use `/quest <goal>`, and fight the boss in chat.
+- Claude's result is detected by the file appearing or changing. If Claude saves elsewhere, use **Result file** (quiet buttons) to point at it, or **Take over**.

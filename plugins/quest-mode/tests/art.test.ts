@@ -3,6 +3,11 @@ import { describe, expect, test } from 'claude-code/testing'
 import {
   BOSS,
   BOSS_BEATEN,
+  CASTLE,
+  CASTLE_BEATEN,
+  PINE,
+  drawArena,
+  drawBanner,
   HERO,
   HERO_STEP,
   MARK_DONE,
@@ -40,6 +45,9 @@ describe('sprites are small data tables', () => {
       [MARK_NOW, 5, 5],
       [BOSS, 7, 7],
       [BOSS_BEATEN, 7, 7],
+      [CASTLE, 11, 12],
+      [CASTLE_BEATEN, 11, 12],
+      [PINE, 3, 5],
     ]
     for (const [sprite, w, h] of sets) {
       expect(sprite).toHaveLength(h)
@@ -54,24 +62,24 @@ describe('sprites are small data tables', () => {
 describe('layout', () => {
   test('stops spread evenly with room at both ends', () => {
     const xs = stopXs(60, 5)
-    expect(xs[0]).toBe(7)
-    expect(xs[4]).toBe(53)
+    expect(xs[0]).toBe(9)
+    expect(xs[4]).toBe(51)
     expect(xs.every((x, i) => i === 0 || x > (xs[i - 1] as number))).toBe(true)
   })
 
   test('the map fits only when stops are far enough apart', () => {
     expect(fitsMap(64, 8)).toBe(true)
     expect(fitsMap(40, 8)).toBe(false)
-    expect(fitsMap(26, 3)).toBe(true)
+    expect(fitsMap(30, 3)).toBe(true)
     expect(fitsMap(24, 3)).toBe(false)
   })
 
   test('the hero stands above a stop, beside a live boss and on a beaten one', () => {
     const live = scene(['done', 'done', 'current'])
-    expect(heroSpot(live, 1)).toEqual({ x: stopXs(60, 3)[1], y: 2 })
-    expect(heroSpot(live, 2).x).toBe((stopXs(60, 3)[2] as number) - 8)
+    expect(heroSpot(live, 1)).toEqual({ x: stopXs(60, 3)[1], y: 6 })
+    expect(heroSpot(live, 2).x).toBe((stopXs(60, 3)[2] as number) - 9)
     const won = scene(['done', 'done', 'done'])
-    expect(heroSpot(won, 2)).toEqual({ x: stopXs(60, 3)[2], y: 1 })
+    expect(heroSpot(won, 2)).toEqual({ x: stopXs(60, 3)[2], y: 0 })
   })
 
   test('walking slides the hero between stops and stops at the end', () => {
@@ -100,9 +108,9 @@ describe('rendering', () => {
     const px = drawScene(scene(['current', 'todo', 'todo'], 30))
     const { columns, rows, cells } = toCells(px)
     expect(columns).toBe(30)
-    expect(rows).toBe(9)
+    expect(rows).toBe(12)
     // 30 * 9 cells * 12 bytes, padded base64
-    expect(cells).toHaveLength(Math.ceil((30 * 9 * 12) / 3) * 4)
+    expect(cells).toHaveLength(Math.ceil((30 * 12 * 12) / 3) * 4)
     expect(cells).toMatch(/^[A-Za-z0-9+/]+={0,2}$/)
     // first cell: code point U+2580 little-endian is 80 25 00 00
     expect(cells.startsWith(toBase64([0x80, 0x25, 0, 0]).slice(0, 4))).toBe(true)
@@ -120,7 +128,7 @@ describe('rendering', () => {
     const svg = toSvg(drawScene(scene(['done', 'done', 'current', 'todo', 'todo', 'todo'], 64)), 6)
     expect(svg.startsWith('<svg ')).toBe(true)
     expect(svg.endsWith('</svg>')).toBe(true)
-    expect(svg).toContain('viewBox="0 0 64 18"')
+    expect(svg).toContain('viewBox="0 0 64 24"')
     expect(svg).toContain('width="384"')
     expect(svg).toContain('crispEdges')
     expect(svg.length).toBeLessThan(40_000)
@@ -139,6 +147,24 @@ describe('rendering', () => {
     expect(textMap(stops)).toBe('✔ ─ ▶ ─ ○ ─ ☠')
     expect(mapAlt(stops, 1)).toContain('4 stops')
     expect(mapAlt(stops, 1)).toContain('stop 2')
+  })
+})
+
+describe('arena and banner', () => {
+  test('the arena is opaque, and a flash changes the picture', () => {
+    const calm = drawArena(44, 1, null)
+    expect(calm.data.every(c => c >= 0)).toBe(true)
+    expect(drawArena(44, 1, 'hit').data).not.toEqual(calm.data)
+    expect(drawArena(44, 1, 'hurt').data).not.toEqual(calm.data)
+    expect(drawArena(44, 0.2, null).data).not.toEqual(calm.data) // the boss bar shrinks
+  })
+
+  test('titles draw for every word we use', () => {
+    for (const text of ['QUEST MODE', 'VICTORY']) {
+      const px = drawBanner(text)
+      expect(px.data.every(c => c >= 0)).toBe(true)
+      expect(px.w).toBeGreaterThan(30)
+    }
   })
 })
 
