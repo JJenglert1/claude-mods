@@ -93,6 +93,8 @@ declare module 'claude-code' {
       run: BridgeRun
       log: BridgeLogEntry[]
       shelf: BridgeShelfItem[]
+      /** Text typed in the Change course box, not yet engaged. */
+      draft: string
     }
   }
 }

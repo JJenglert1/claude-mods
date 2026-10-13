@@ -118,10 +118,10 @@ test("captain's log: one set of entries per turn, from real actions", async ($, 
   for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
     const lines = await texts(ui)
-    const log = lines.filter(line => /^\d\d:\d\d {2}(DID|DECIDED|OPEN|TURN|NOTE)/.test(line))
+    const log = lines.filter(line => /^SD \d{4}\.\d{4} {2}(DID|DECIDED|OPEN|TURN|NOTE)/.test(line))
 
     // newest first: the turn line, then the open work, the decision, then the actions
-    expect(log.map(line => line.replace(/^\d\d:\d\d {2}/, '').replace(/\s+/g, ' '))).toEqual([
+    expect(log.map(line => line.replace(/^SD \d{4}\.\d{4} {2}/, '').replace(/\s+/g, ' '))).toEqual([
       'TURN Turn 1: wrote 1 file, ran 1 command, 1 failed',
       'OPEN Still need to confirm dinner.',
       'DECIDED I decided to use the train.',
@@ -129,8 +129,7 @@ test("captain's log: one set of entries per turn, from real actions", async ($, 
       'DID Ran: npm run build',
       'DID Wrote trip/plan.md',
     ])
-    expect(hasLine(lines, '! Command failed: npm test')).toBe(true)
-    expect(hasLine(lines, '! Still need to confirm dinner.')).toBe(true)
+    expect(hasLine(lines, 'Unfinished: Still need to confirm dinner.')).toBe(true)
     await ui.unmount()
   }
 
@@ -160,12 +159,12 @@ test('results shelf lists files written or edited, one row per file, on both sur
     const ui = await mountPane($, surface)
     const lines = await texts(ui)
 
-    expect(lines).toContain('RESULTS SHELF (3)')
+    expect(lines).toContain('▶ RESULTS SHELF (3)')
 
     const buttons = await ui.findAll({ type: 'Button' })
     const names = buttons.filter(b => /^open:/.test(String(b.key))).map(b => b.text)
 
-    expect(names).toEqual(['n.ipynb', 'trip.md', 'budget.md'])
+    expect(names).toEqual(['▣ n.ipynb', '▣ trip.md', '▣ budget.md'])
     expect(hasLine(lines, 'new · /proj/notes/budget.md')).toBe(true)
     expect(hasLine(lines, 'new · /proj/notes/trip.md')).toBe(true)
     expect(hasLine(lines, 'edited · /proj/n.ipynb')).toBe(true)
@@ -194,12 +193,35 @@ test('Change course: the input queues a new instruction and the mission display 
 
     expect(lines).toContain('Goal: Plan a weekend trip to Lisbon under $900')
     expect(lines).toContain('Latest instruction: keep the total budget under $600')
-    expect(lines).toContain('Next step: Apply the change: keep the total budget under $600 (your instruction)')
+    expect(lines).toContain('Next step: Apply the change: keep the total budget under $600 (your order)')
     expect(hasLine(lines, 'Course change: keep the total budget under $600')).toBe(true)
 
     // An empty submit sends nothing.
     await ui.input({ key: 'course', text: '   ' })
     expect(w.prompts).toHaveLength(1)
+    await ui.unmount()
+  }
+})
+
+test('Engage sends the typed order, Cancel clears it; settings sit in a footer row', async ($, on) => {
+  const w = setup($, on)
+
+  for (const surface of SURFACES) {
+    w.prompts.length = 0
+
+    const ui = await mountPane($, surface)
+
+    await ui.input({ key: 'course', text: 'drop the hotel', kind: 'change' } as never)
+    await ui.press({ key: 'cancel' })
+    await ui.press({ key: 'engage' })
+    expect(w.prompts).toEqual([])
+    await ui.input({ key: 'course', text: 'drop the hotel', kind: 'change' } as never)
+    await ui.press({ key: 'engage' })
+    expect(w.prompts.map(p => p.text)).toEqual(['Change of course: drop the hotel'])
+
+    await ui.press({ key: 'set:sound' })
+    expect(w.stored.settings).toMatchObject({ sound: true })
+    await ui.press({ key: 'set:sound' })
     await ui.unmount()
   }
 })

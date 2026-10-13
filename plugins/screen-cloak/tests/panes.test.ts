@@ -116,21 +116,19 @@ describe('other plugins\' panes', () => {
 })
 
 describe('the band above the prompt', () => {
-  test('is a visible switch, on both surfaces', async ($: any, on: any) => {
+  test('is hidden while off by default, and a visible switch once on, on both surfaces', async ($: any, on: any) => {
     const w = world(on)
     await start($)
     for (const surface of SURFACES) {
       const ui = await mountBand($, surface)
-      expect(await ui.find({ type: 'Text', text: /CLOAK OFF/ })).toBeDefined()
-      expect((await ui.find({ type: 'Button', key: 'toggle' }))?.props).toMatchObject({ label: 'Turn on', hotkey: 'c', variant: 'primary' })
-      expect(await ui.find({ type: 'Button', key: 'reveal' })).toBeUndefined() // nothing to reveal while off
-      await ui.press({ key: 'toggle' })
-      expect(w.value('isOn')).toBe(true)
+      expect(await ui.find({ type: 'Text', text: /CLOAK OFF/ })).toBeUndefined()
+      await $.command.run(RUN('on'))
       expect(await ui.find({ type: 'Text', text: /CLOAK ON/ })).toBeDefined()
-      expect((await ui.find({ type: 'Button', key: 'toggle' }))?.props.label).toBe('Turn off')
+      expect((await ui.find({ type: 'Button', key: 'toggle' }))?.props).toMatchObject({ label: 'Turn off', hotkey: 'c' })
       expect(await ui.find({ type: 'Text', text: /Claude still sees all/ })).toBeDefined()
       await ui.press({ key: 'toggle' })
       expect(w.value('isOn')).toBe(false)
+      expect(await ui.find({ type: 'Text', text: /CLOAK ON/ })).toBeUndefined()
       await ui.unmount()
     }
   })

@@ -44,28 +44,27 @@ import {
   removeAsksOfKind,
   setGoal,
   settingsLine,
-  starCellsBase64,
-  starSvg,
   turnEnded,
   turnStarted,
   withNextStep,
 } from './bridge'
+import { drawBridge, toCells, toSvg } from './art'
 
 const PANE = 'spaceship-bridge'
 const STAR_MS = 500
-const STAR_ROWS = 3
 
 const settingsAtom = atom({ plugin: 'spaceship-bridge', key: 'settings' } as const, DEFAULT_SETTINGS)
 const missionAtom = atom({ plugin: 'spaceship-bridge', key: 'mission' } as const, EMPTY_MISSION)
 const runAtom = atom({ plugin: 'spaceship-bridge', key: 'run' } as const, EMPTY_RUN)
 const logAtom = atom({ plugin: 'spaceship-bridge', key: 'log' } as const, [] as BridgeLogEntry[])
+const draftAtom = atom({ plugin: 'spaceship-bridge', key: 'draft' } as const, '')
 const shelfAtom = atom({ plugin: 'spaceship-bridge', key: 'shelf' } as const, [] as BridgeShelfItem[])
 
 // Handles and observed facts, never drawing state: a reload drops the timer itself and
 // the next open or render puts the rest back.
 let timer: Timer | undefined
 let frame = 0
-let starSize: { columns: number; rows: number } | undefined
+let starWidth: number | undefined
 
 /** Bookkeeping never gets to fail the call it watches: a failure here is dropped. */
 const attempt = async (work: () => Promise<unknown>): Promise<void> => {
@@ -191,13 +190,14 @@ async function starTick($: Engine): Promise<void> {
 
     frame = (frame + 1) % 100_000
 
-    if (starSize !== undefined) {
+    if (starWidth !== undefined) {
+      const art = toCells(drawBridge(starWidth, frame))
       const sent = await $.ui.blit({
         requestId: PANE,
         key: 'stars',
-        cells: starCellsBase64(starSize.columns, starSize.rows, frame),
-        columns: starSize.columns,
-        rows: starSize.rows,
+        cells: art.cells,
+        columns: art.columns,
+        rows: art.rows,
       })
 
       // Not mounted (another tab shows, or the surface draws no Raster): stop asking.
@@ -361,6 +361,22 @@ const TOGGLE_NOTE: Record<string, (value: boolean) => string> = {
   style: value => `Ship computer tone ${ON_OFF(value)}. It applies from the next request.`,
   sound: value => `Sound ${ON_OFF(value)}.`,
   summary: value => `Model-written next step ${ON_OFF(value)}.`,
+}
+
+async function toggleSetting($: Engine, key: keyof BridgeSettings): Promise<void> {
+  const current = (await read($, settingsAtom))[key]
+
+  await saveSettings($, settings => ({ ...settings, [key]: !current }))
+  await attempt(() => syncStars($))
+
+  if (key === 'style') {
+    $.ui.invalidate('prompt.section')
+  }
+}
+
+async function engage($: Engine, text: string): Promise<void> {
+  await update($, draftAtom, () => '')
+  await changeOfCourse($, text)
 }
 
 async function statusText($: Engine): Promise<string> {
@@ -713,6 +729,9 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {inner}
         <Box>
+          <Text bold color="cyan">
+            {'◆ BRIDGE '}
+          </Text>
           <Text bold color={STATUS_COLOR[status.id]}>
             {line.head}
           </Text>
@@ -726,41 +745,39 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const table = $.ui.resolve(e)
     const { Box, Text, Button } = table
-    // The phone app draws no text field yet; the Change course button and /bridge course still work there.
+    // The phone app draws no text field yet; /bridge course still works there.
     const Input = 'Input' in table ? table.Input : undefined
     const settings = await read($, settingsAtom)
     const mission = await read($, missionAtom)
     const run = await read($, runAtom)
     const log = await read($, logAtom)
     const shelf = await read($, shelfAtom)
+    const draft = await read($, draftAtom)
     const width = Math.max(24, e.props.bodyColumns)
     const status = deriveStatus(run)
     const open = openItems(log)
+    const panel = (color: string) =>
+      ({ flexDirection: 'column', borderStyle: 'round', borderColor: color, paddingX: 1 }) as const
 
-    let stars = null
+    let banner = null
 
     if (settings.stars && e.surface === 'terminal') {
       const { Raster } = $.ui.resolve(e)
-      const columns = Math.min(width, 60)
 
-      starSize = { columns, rows: STAR_ROWS }
-      stars = (
-        <Raster
-          key="stars"
-          columns={columns}
-          rows={STAR_ROWS}
-          cells={starCellsBase64(columns, STAR_ROWS, frame)}
-        />
-      )
+      starWidth = width >= 62 ? 60 : 40
+
+      const art = toCells(drawBridge(starWidth, frame))
+
+      banner = <Raster key="stars" columns={art.columns} rows={art.rows} cells={art.cells} />
     } else if (settings.stars && e.surface === 'desktop') {
       const { Svg } = $.ui.resolve(e)
+      const art = drawBridge(60, 0)
 
-      stars = (
+      banner = (
         <Svg
-          source={starSvg(480, 48, settings.motion)}
-          alt="Decorative starfield"
+          source={toSvg(art, 8, settings.motion)}
+          alt="Starship viewscreen: the word BRIDGE, a ship and stars"
           width={480}
-          height={48}
           isInteractive={settings.motion}
         />
       )
@@ -768,79 +785,100 @@ export const register: Register = on => {
 
     const sourceNote =
       mission.nextSource === 'course'
-        ? ' (your instruction)'
+        ? ' (your order)'
         : mission.nextSource === 'summary'
-          ? ' (model summary)'
+          ? ' (ship computer summary)'
           : mission.nextSource === 'reply'
             ? ' (from the reply)'
             : ''
+    const toggles: [keyof BridgeSettings, string][] = [
+      ['compact', 'compact'],
+      ['motion', 'motion'],
+      ['sound', 'sound'],
+      ['style', 'computer voice'],
+      ['summary', 'auto summary'],
+    ]
 
     return (
       <Box flexDirection="column">
-        {stars}
-        <Text bold>SPACESHIP BRIDGE</Text>
-        <Box gap={1}>
-          <Text bold>STATUS</Text>
+        {banner}
+        <Box {...panel('yellow')}>
+          <Text bold color="yellow">{'▶ STATUS LAMP'}</Text>
           <Text bold color={STATUS_COLOR[status.id]}>
             {`${status.glyph} ${status.label}`}
           </Text>
+          <Text wrap="wrap">{`Why: ${status.reason}`}</Text>
+          <Text wrap="wrap">{'Lamps: ◐ Working · ▲ Needs your input · ✓ Ready to review'}</Text>
         </Box>
-        <Text wrap="truncate-end">{`Why: ${status.reason}`}</Text>
-        <Text> </Text>
-        <Text bold>CURRENT MISSION</Text>
-        <Text wrap="wrap">{`Goal: ${mission.goal === '' ? 'none yet. Type a prompt, or /bridge mission <text>' : mission.goal}`}</Text>
-        {mission.latest !== '' && <Text wrap="wrap">{`Latest instruction: ${mission.latest}`}</Text>}
-        <Text wrap="wrap">{`Next step: ${mission.nextStep === '' ? 'waiting for the first turn' : mission.nextStep}${sourceNote}`}</Text>
-        <Text> </Text>
-        <Box gap={1}>
-          <Button key="briefing" label="Give me a briefing" hotkey="b" variant="primary" onPress={() => askBriefing($)} />
-          <Button key="result" label="Show the result" hotkey="r" onPress={() => showResult($)} />
-          <Button
-            key="course-focus"
-            label="Change course"
-            hotkey="c"
-            onPress={() => {
-              void $.ui.focus({ requestId: PANE, key: 'course' }).catch(() => undefined)
-            }}
-          />
+        <Box {...panel('cyan')}>
+          <Text bold color="cyan">{'▶ MISSION PARAMETERS'}</Text>
+          <Text wrap="wrap">{`Goal: ${mission.goal === '' ? "awaiting captain's orders. Type a prompt, or /bridge mission <text>" : mission.goal}`}</Text>
+          {mission.latest !== '' && <Text wrap="wrap">{`Latest instruction: ${mission.latest}`}</Text>}
+          <Text wrap="wrap">{`Next step: ${mission.nextStep === '' ? 'no course plotted yet' : mission.nextStep}${sourceNote}`}</Text>
         </Box>
-        {Input !== undefined && (
-          <Input
-            key="course"
-            label="New instruction:"
-            placeholder="for example: keep the budget under $800"
-            submitLabel="send"
-            onSubmit={value => changeOfCourse($, value)}
-          />
-        )}
-        <Text> </Text>
-        <Box key="shelf" flexDirection="column">
-          <Text bold>{`RESULTS SHELF (${shelf.length})`}</Text>
-          {shelf.length === 0 && <Text>Nothing yet. Files Claude writes or edits appear here.</Text>}
+        <Box {...panel('blue')}>
+          <Text bold color="blue">{"▶ CAPTAIN'S ORDERS"}</Text>
+          <Box gap={1}>
+            <Button key="briefing" label="▶ Give me a briefing" hotkey="b" variant="primary" onPress={() => askBriefing($)} />
+            <Button key="result" label="Show the result" hotkey="r" onPress={() => showResult($)} />
+            <Button
+              key="course-focus"
+              label="Change course"
+              hotkey="c"
+              onPress={() => {
+                void $.ui.focus({ requestId: PANE, key: 'course' }).catch(() => undefined)
+              }}
+            />
+          </Box>
+          {Input !== undefined && (
+            <Input
+              key="course"
+              label="New order:"
+              placeholder="for example: keep the budget under $800"
+              value={draft}
+              submitLabel="engage"
+              onInput={value => void update($, draftAtom, () => value)}
+              onSubmit={value => engage($, value)}
+            />
+          )}
+          {Input !== undefined && (
+            <Box gap={1}>
+              <Button key="engage" label="Engage" hotkey="e" variant="primary" onPress={() => engage($, draft)} />
+              <Button key="cancel" label="Cancel" hotkey="x" onPress={() => void update($, draftAtom, () => '')} />
+            </Box>
+          )}
+        </Box>
+        <Box {...panel('green')}>
+          <Text bold color="green">{"▶ CAPTAIN'S LOG"}</Text>
+          {open.map(entry => (
+            <Text wrap="wrap" color="yellow">{`! Unfinished: ${entry.text}`}</Text>
+          ))}
+          {log.length === 0 && <Text>Log is clear. No entries yet.</Text>}
+          {[...log].reverse().slice(0, 10).map(entry => (
+            <Text wrap="wrap">{`${stardate(entry.at)}  ${LOG_TAG[entry.kind]}  ${entry.text}`}</Text>
+          ))}
+        </Box>
+        <Box key="shelf" {...panel('magenta')}>
+          <Text bold color="magenta">{`▶ RESULTS SHELF (${shelf.length})`}</Text>
+          {shelf.length === 0 && <Text>Cargo bay empty. Files Claude writes or edits are stored here.</Text>}
           {shelf.slice(0, 6).map((item, i) => (
             <Box gap={1}>
-              <Button key={`open:${i}`} label={item.name} plain onPress={() => openOutput($, item.path)} />
+              <Button key={`open:${i}`} label={`▣ ${item.name}`} plain onPress={() => openOutput($, item.path)} />
               <Text wrap="truncate-end">{`${item.isNew ? 'new' : 'edited'} · ${item.path}`}</Text>
             </Box>
           ))}
         </Box>
-        <Text> </Text>
-        {open.length > 0 && (
-          <Box flexDirection="column">
-            <Text bold>UNFINISHED</Text>
-            {open.map(entry => (
-              <Text wrap="wrap">{`! ${entry.text}`}</Text>
-            ))}
-            <Text> </Text>
-          </Box>
-        )}
-        <Text bold>{"CAPTAIN'S LOG"}</Text>
-        {log.length === 0 && <Text>No entries yet.</Text>}
-        {[...log].reverse().slice(0, 10).map(entry => (
-          <Text wrap="wrap">{`${logTime(entry.at)}  ${LOG_TAG[entry.kind]}  ${entry.text}`}</Text>
-        ))}
-        <Text> </Text>
-        <Text wrap="wrap">{`Settings: ${settingsLine(settings)}`}</Text>
+        <Box gap={1}>
+          {toggles.map(([key, label]) => (
+            <Button
+              key={`set:${key}`}
+              label={`${label}: ${settings[key] ? 'on' : 'off'}`}
+              plain
+              onPress={() => toggleSetting($, key)}
+            />
+          ))}
+        </Box>
+        <Text wrap="wrap">{settingsLine(settings)}</Text>
       </Box>
     )
   })
@@ -862,9 +900,10 @@ const LOG_TAG: Record<BridgeLogEntry['kind'], string> = {
   note: 'NOTE   ',
 }
 
-function logTime(ms: number): string {
+/** A stardate-style stamp: SD month-day.hour-minute. */
+function stardate(ms: number): string {
   const d = new Date(ms)
   const two = (n: number) => String(n).padStart(2, '0')
 
-  return `${two(d.getHours())}:${two(d.getMinutes())}`
+  return `SD ${two(d.getMonth() + 1)}${two(d.getDate())}.${two(d.getHours())}${two(d.getMinutes())}`
 }

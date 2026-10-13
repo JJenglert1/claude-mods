@@ -7,6 +7,15 @@ and in an optional one-line band above the prompt.
 Works in the terminal and in the desktop app. Nothing here changes what Claude
 does. It only watches the session and shows what it saw.
 
+## Look (0.2.0)
+
+A pixel-art viewscreen header (ship, stars, the word BRIDGE, console corners): a `Raster` on
+the terminal, an `Svg` on the desktop. Still unless `/bridge motion on`. Below it are framed
+panels in fixed colours: amber STATUS LAMP, cyan MISSION PARAMETERS, blue CAPTAIN'S ORDERS
+(briefing, show the result, change course with Input, Engage and Cancel), green CAPTAIN'S LOG
+with stardate stamps (`SD 1005.1430`), magenta RESULTS SHELF (cargo bay). Settings are a quiet
+footer row of buttons. No background colours; status uses a symbol and a word.
+
 ## Demo: plan a weekend trip
 
 1. Type `/bridge`. The pane opens. Status says **Standing by**.

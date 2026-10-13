@@ -1,7 +1,9 @@
 {
   "name": "screen-cloak",
-  "version": "0.1.0",
-  "author": { "name": "JJ Englert" },
+  "version": "0.2.0",
+  "author": {
+    "name": "JJ Englert"
+  },
   "description": "Hides emails, phone numbers, money, account numbers and names you list from what is drawn on screen, so you can share your screen. Claude still sees everything.",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -33,7 +35,7 @@
       "type": "boolean",
       "title": "Hide the band when Cloak is off",
       "description": "Show the Cloak band above the prompt only while Cloak is on. Use /cloak on to turn it back on.",
-      "default": false
+      "default": true
     }
   }
 }

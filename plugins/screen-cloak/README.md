@@ -143,7 +143,7 @@ Plugin options (`/config`, or `pluginConfigs` in settings):
 | Names to always hide (`alwaysHide`) | empty | Comma separated. **Saved in your settings file as plain text.** Names added with `/cloak add` stay in this session only |
 | Reveal lasts (`revealSeconds`) | 10 | Seconds before a reveal ends |
 | Reveal on hover (`hoverReveal`) | off | See above; never in recording mode |
-| Hide the band when Cloak is off (`hideBandWhenOff`) | off | Band shows only while Cloak is on |
+| Hide the band when Cloak is off (`hideBandWhenOff`) | on | Band shows only while Cloak is on |
 
 The category switches and recording mode are remembered across sessions in the
 plugin store. Only those switches are saved. No original text, name or

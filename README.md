@@ -40,3 +40,19 @@ claude --plugin-dir ./plugins/replay-theater
 These are early. Claude Code's mod API (function hooks) is in early access and may change between releases. Built and checked against Claude Code 2.1.290.
 
 Each mod passes `claude plugin validate` and its own tests (`claude plugin test plugins/<name>`). Blast Radius, Time Machine and Replay Theater were also tested on real files in throwaway folders. They are built for both the terminal and the desktop app's Code tab. None has been fully tried in a live session yet. See each mod's README for its limits.
+
+## Run the checks yourself
+
+```bash
+claude plugin validate plugins/screen-cloak
+```
+
+```bash
+claude plugin test plugins/screen-cloak
+```
+
+Swap in any mod's folder name.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

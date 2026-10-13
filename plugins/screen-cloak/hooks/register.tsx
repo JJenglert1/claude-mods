@@ -510,7 +510,7 @@ async function previewLines($: Engine): Promise<{ lines: PreviewLine[]; summary:
 export const register: Register = (on, options) => {
   revealSeconds = typeof options.revealSeconds === 'number' && options.revealSeconds > 0 ? options.revealSeconds : 10
   isHoverSetting = options.hoverReveal === true
-  isBandHiddenWhenOff = options.hideBandWhenOff === true
+  isBandHiddenWhenOff = options.hideBandWhenOff !== false
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
